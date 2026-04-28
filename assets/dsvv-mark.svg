@@ -1,0 +1,22 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Dev Sanskriti Vishwavidyalaya mark</title>
+  <desc id="desc">A circular green and saffron emblem with a book and rising sun motif.</desc>
+  <defs>
+    <linearGradient id="g1" x1="18" y1="14" x2="102" y2="106" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0D5C46" />
+      <stop offset="1" stop-color="#17785B" />
+    </linearGradient>
+    <linearGradient id="g2" x1="30" y1="20" x2="90" y2="98" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F2E3BC" />
+      <stop offset="1" stop-color="#DDAA54" />
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="54" fill="url(#g1)" />
+  <circle cx="60" cy="60" r="46" fill="#F8F4EB" opacity="0.95" />
+  <path d="M30 72C42 66 51 64 60 64C69 64 78 66 90 72V84C78 78 69 76 60 76C51 76 42 78 30 84V72Z" fill="url(#g2)" />
+  <path d="M35 41H85C87.7614 41 90 43.2386 90 46V69C78.5 64.5 69.5 62.5 60 62.5C50.5 62.5 41.5 64.5 30 69V46C30 43.2386 32.2386 41 35 41Z" fill="#E8F0EC" stroke="#0D5C46" stroke-width="2" />
+  <path d="M60 29C68.8366 29 76 36.1634 76 45H44C44 36.1634 51.1634 29 60 29Z" fill="#DDAA54" />
+  <circle cx="60" cy="34" r="4" fill="#0D5C46" />
+  <path d="M45 49H75" stroke="#0D5C46" stroke-width="2.5" stroke-linecap="round" />
+  <path d="M45 56H70" stroke="#0D5C46" stroke-width="2.5" stroke-linecap="round" opacity="0.85" />
+</svg>

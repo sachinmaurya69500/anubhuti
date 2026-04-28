@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Anubhuti: the Dev Sanskriti Vishwavidyalaya internship experience portal for forms, archive volumes, and admin form management."
+    />
+    <title>Anubhuti | Dev Sanskriti Vishwavidyalaya</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="backdrop backdrop-one"></div>
+    <div class="backdrop backdrop-two"></div>
+
+    <header class="site-header">
+      <div class="brand-block">
+        <div class="brand-mark">A</div>
+        <div>
+          <p class="eyebrow">Anubhuti</p>
+          <h1>Dev Sanskriti Vishwavidyalaya</h1>
+        </div>
+      </div>
+
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#home" data-route="home">Home</a>
+        <a href="#about" data-route="about">About DSVV</a>
+        <a href="#forms" data-route="forms">Forms</a>
+        <a href="#archive" data-route="archive">Archive</a>
+        <a href="#admin" data-route="admin">Admin Panel</a>
+      </nav>
+    </header>
+
+    <main class="shell">
+      <section class="hero-card page" id="home" data-page="home">
+        <div class="hero-copy">
+          <p class="eyebrow">Internship experience portal</p>
+          <h2>Capture field learning, publish volume archives, and manage internship forms in one place.</h2>
+          <p class="lead">
+            Anubhuti brings together the student submission workflow for internship experience reports,
+            the DSVV story, archive volumes, and a practical admin workspace for creating and managing forms.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#forms">Submit Experience</a>
+            <a class="button secondary" href="#admin">Open Admin Panel</a>
+          </div>
+          <div class="stat-grid" id="home-stats"></div>
+        </div>
+
+        <aside class="hero-panel">
+          <div class="panel-card accent">
+            <p>Next deadline</p>
+            <strong id="next-deadline">Loading...</strong>
+            <span id="next-deadline-note"></span>
+          </div>
+          <div class="panel-card">
+            <p>Archive volumes</p>
+            <strong id="volume-count">0</strong>
+            <span>Published collections from submitted internship stories.</span>
+          </div>
+          <div class="panel-card">
+            <p>Student submissions</p>
+            <strong id="submission-count">0</strong>
+            <span>Saved locally in this prototype for fast demo use.</span>
+          </div>
+        </aside>
+
+        <div class="full-width stack" id="home-spotlight"></div>
+      </section>
+
+      <section class="content-grid page" id="about" data-page="about" hidden>
+        <div class="section-heading">
+          <p class="eyebrow">About DSVV</p>
+          <h2>Service, scholarship, and spiritual learning.</h2>
+        </div>
+        <div class="two-column">
+          <article class="surface-card prose-card">
+            <p>
+              Dev Sanskriti Vishwavidyalaya is presented here as a values-led academic environment where
+              internships, reflective practice, and community engagement are connected rather than isolated.
+            </p>
+            <p>
+              The Anubhuti portal supports that approach by collecting internship reflections, organizing them
+              into structured volumes, and helping administrators keep forms current and submissions on time.
+            </p>
+          </article>
+          <article class="surface-card timeline-card">
+            <div class="timeline-item">
+              <span>1</span>
+              <div>
+                <h3>Purpose-led learning</h3>
+                <p>Students record practical internship insights alongside academic outcomes.</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <span>2</span>
+              <div>
+                <h3>Structured archives</h3>
+                <p>Volumes preserve reports, summaries, and notable reflections for future reference.</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <span>3</span>
+              <div>
+                <h3>Responsive administration</h3>
+                <p>Administrators create forms, edit them, delete outdated items, and extend deadlines when needed.</p>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="content-grid page" id="forms" data-page="forms" hidden>
+        <div class="section-heading">
+          <p class="eyebrow">Student forms</p>
+          <h2>Submit internship experience reports before the deadline.</h2>
+        </div>
+        <div class="two-column forms-layout">
+          <article class="surface-card">
+            <div class="card-head">
+              <h3>Available forms</h3>
+              <span class="subtle" id="forms-meta"></span>
+            </div>
+            <div class="stack" id="student-forms-list"></div>
+          </article>
+
+          <article class="surface-card">
+            <div class="card-head">
+              <h3>Submission form</h3>
+              <span class="subtle">Student internship experience</span>
+            </div>
+            <form id="student-submission-form" class="stack form-grid" data-form="student-submission">
+              <label>
+                Select form
+                <select name="formId" required id="submission-form-select"></select>
+              </label>
+              <label>
+                Student name
+                <input name="studentName" type="text" placeholder="Your full name" aria-label="Student name" required />
+              </label>
+              <label>
+                Roll / enrollment number
+                <input name="rollNumber" type="text" placeholder="Roll number" aria-label="Roll or enrollment number" required />
+              </label>
+              <label>
+                Programme
+                <input name="programme" type="text" placeholder="B.Sc., M.A., etc." aria-label="Programme" required />
+              </label>
+              <label>
+                Internship organization
+                <input name="organization" type="text" placeholder="Organization / NGO / company" aria-label="Internship organization" required />
+              </label>
+              <label>
+                Mentor / supervisor
+                <input name="mentor" type="text" placeholder="Supervisor name" aria-label="Mentor or supervisor" required />
+              </label>
+              <label>
+                Duration
+                <input name="duration" type="text" placeholder="e.g. 6 weeks" aria-label="Internship duration" required />
+              </label>
+              <label>
+                Archive volume
+                <select name="volumeId" id="submission-volume-select"></select>
+              </label>
+              <label class="full-width">
+                Experience summary
+                <textarea
+                  name="summary"
+                  rows="6"
+                  placeholder="Write a concise summary of the work you did, the skills you learned, and key outcomes."
+                  required
+                ></textarea>
+              </label>
+              <button class="button primary" type="submit">Submit experience</button>
+            </form>
+          </article>
+        </div>
+      </section>
+
+      <section class="content-grid page" id="archive" data-page="archive" hidden>
+        <div class="section-heading">
+          <p class="eyebrow">Archive</p>
+          <h2>Browse the collections as volume-based records.</h2>
+        </div>
+        <div class="surface-card archive-toolbar">
+          <label>
+            Search volumes and submissions
+            <input id="archive-search" type="search" placeholder="Search by volume, student, or title" aria-label="Search archive volumes and submissions" />
+          </label>
+          <div class="metric-row" id="archive-metrics"></div>
+        </div>
+        <div class="stack" id="archive-volume-list"></div>
+      </section>
+
+      <section class="content-grid page" id="admin" data-page="admin" hidden>
+        <div class="section-heading">
+          <p class="eyebrow">Admin panel</p>
+          <h2>Create forms, edit details, delete obsolete items, and extend deadlines.</h2>
+        </div>
+
+        <div class="two-column admin-layout">
+          <article class="surface-card">
+            <div class="card-head">
+              <h3>Create form</h3>
+              <span class="subtle">New student submission window</span>
+            </div>
+            <form id="admin-create-form" class="stack form-grid" data-form="create-form">
+              <label>
+                Form title
+                <input name="title" type="text" placeholder="Internship experience submission" aria-label="Form title" required />
+              </label>
+              <label>
+                Category
+                <input name="category" type="text" placeholder="Internship / field work / seminar" aria-label="Form category" required />
+              </label>
+              <label>
+                Deadline
+                <input name="deadline" type="date" aria-label="Form deadline" required />
+              </label>
+              <label>
+                Default archive volume
+                <select name="volumeId" id="admin-volume-default"></select>
+              </label>
+              <label class="full-width">
+                Description
+                <textarea name="description" rows="5" placeholder="Explain what the form expects from students." required></textarea>
+              </label>
+              <button class="button primary" type="submit">Create form</button>
+            </form>
+          </article>
+
+          <article class="surface-card">
+            <div class="card-head">
+              <h3>Create archive volume</h3>
+              <span class="subtle">Volume-based collection</span>
+            </div>
+            <form id="admin-create-volume" class="stack form-grid" data-form="create-volume">
+              <label>
+                Volume label
+                <input name="volumeLabel" type="text" placeholder="Volume V" aria-label="Volume label" required />
+              </label>
+              <label>
+                Academic year
+                <input name="year" type="text" placeholder="2026-27" aria-label="Academic year" required />
+              </label>
+              <label>
+                Publication date
+                <input name="publishedAt" type="date" aria-label="Publication date" required />
+              </label>
+              <label class="full-width">
+                Volume description
+                <textarea name="description" rows="5" placeholder="Describe the theme or focus of this volume." required></textarea>
+              </label>
+              <button class="button secondary" type="submit">Create volume</button>
+            </form>
+          </article>
+        </div>
+
+        <article class="surface-card">
+          <div class="card-head">
+            <h3>Analytics & Insights</h3>
+          </div>
+          <div id="admin-analytics-summary"></div>
+        </article>
+
+        <div class="two-column admin-layout">
+          <article class="surface-card">
+            <div class="card-head">
+              <h3>Manage forms</h3>
+              <span class="subtle" id="admin-form-count"></span>
+            </div>
+            <div class="stack" id="admin-forms-list"></div>
+          </article>
+
+          <article class="surface-card">
+            <div class="card-head">
+              <h3>Manage volumes</h3>
+              <span class="subtle" id="admin-volume-count"></span>
+            </div>
+            <div class="stack" id="admin-volumes-list"></div>
+          </article>
+        </div>
+
+        <article class="surface-card">
+          <div class="card-head">
+            <h3>Student submissions</h3>
+            <span class="subtle" id="admin-submission-count"></span>
+          </div>
+          <div class="stack" id="admin-submissions-list"></div>
+        </article>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <footer class="site-footer">
+      <p>Designed for Anubhuti, Dev Sanskriti Vishwavidyalaya.</p>
+      <p>Forms, archives, and administration in a single responsive experience.</p>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
