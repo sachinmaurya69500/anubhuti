@@ -40,6 +40,8 @@ const defaultState = () => ({
   totalVisitors: 0,
   analyticsVisitors: [],
   analyticsSubmissions: [],
+  studentAccounts: [],
+  studentActivity: [],
   forms: [
     {
       id: 'form-1',
@@ -149,6 +151,9 @@ const loadState = () => {
 
 let state = loadState();
 let archiveQuery = '';
+let adminUser = null;
+let studentUser = null;
+let activeExperienceId = null;
 
 const elements = {
   pages: Array.from(document.querySelectorAll('.page')),
@@ -172,6 +177,15 @@ const elements = {
   adminVolumesList: document.getElementById('admin-volumes-list'),
   adminSubmissionCount: document.getElementById('admin-submission-count'),
   adminSubmissionsList: document.getElementById('admin-submissions-list'),
+  adminStudentCount: document.getElementById('admin-student-count'),
+  adminStudentActivity: document.getElementById('admin-student-activity'),
+  adminLoginPanel: document.getElementById('admin-login-panel'),
+  adminDashboard: document.getElementById('admin-dashboard'),
+  adminStatus: document.getElementById('admin-status'),
+  adminLoginForm: document.getElementById('admin-login-form'),
+  experienceModal: document.getElementById('experience-modal'),
+  experienceModalTitle: document.getElementById('experience-modal-title'),
+  experienceModalContent: document.getElementById('experience-modal-content'),
   toast: document.getElementById('toast'),
 };
 
@@ -283,6 +297,158 @@ function getFilteredVolumes() {
     });
 }
 
+function getExperienceById(experienceId) {
+  return state.submissions.find((submission) => submission.id === experienceId) || null;
+}
+
+function getExperienceExcerpt(summary) {
+  const text = String(summary || '').trim();
+  if (text.length <= 180) {
+    return text;
+  }
+
+  return `${text.slice(0, 180).trim()}...`;
+}
+
+function showExperienceModal(experienceId) {
+  activeExperienceId = experienceId;
+  if (elements.experienceModal) {
+    elements.experienceModal.hidden = false;
+  }
+  renderExperienceModal();
+}
+
+function hideExperienceModal() {
+  activeExperienceId = null;
+  if (elements.experienceModal) {
+    elements.experienceModal.hidden = true;
+  }
+}
+
+function renderStudentAuthGate(story) {
+  return `
+    <div class="auth-split">
+      <article class="surface-card auth-card compact">
+        <p class="eyebrow">Register</p>
+        <h4>Create a student account</h4>
+        <p class="muted-block">Register once to unlock full experience stories and keep your access active on this device.</p>
+        <form class="stack form-grid" data-form="student-register">
+          <label>
+            Full name
+            <input name="name" type="text" placeholder="Your name" required />
+          </label>
+          <label>
+            Email
+            <input name="email" type="email" placeholder="student@dsvv.ac.in" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" placeholder="Choose a password" required />
+          </label>
+          <button class="button primary full-width" type="submit">Register and continue</button>
+        </form>
+      </article>
+      <article class="surface-card auth-card compact">
+        <p class="eyebrow">Login</p>
+        <h4>Already registered?</h4>
+        <p class="muted-block">Sign in to read the full experience and return to this story anytime.</p>
+        <form class="stack form-grid" data-form="student-login">
+          <label>
+            Email
+            <input name="email" type="email" placeholder="student@dsvv.ac.in" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" placeholder="Your password" required />
+          </label>
+          <button class="button secondary full-width" type="submit">Login and read more</button>
+        </form>
+      </article>
+    </div>
+    <article class="surface-card story-preview">
+      <div class="card-head">
+        <div>
+          <p class="eyebrow">Preview</p>
+          <h4>${escapeHtml(story.studentName)}</h4>
+        </div>
+        <span class="badge">${escapeHtml(dateLabel(story.submittedAt))}</span>
+      </div>
+      <p class="muted-block">${escapeHtml(getExperienceExcerpt(story.summary))}</p>
+    </article>
+  `;
+}
+
+function renderExperienceModal() {
+  if (!elements.experienceModal || !elements.experienceModalContent) {
+    return;
+  }
+
+  const story = getExperienceById(activeExperienceId);
+  if (!story) {
+    elements.experienceModalContent.innerHTML = '<p class="muted-block">This experience is not available.</p>';
+    return;
+  }
+
+  if (!studentUser) {
+    elements.experienceModalTitle.textContent = 'Register or login to read more';
+    elements.experienceModalContent.innerHTML = renderStudentAuthGate(story);
+    return;
+  }
+
+  const linkedForm = findFormById(story.formId);
+  const linkedVolume = findVolumeById(story.volumeId);
+  elements.experienceModalTitle.textContent = `${story.studentName}’s experience`;
+  elements.experienceModalContent.innerHTML = `
+    <article class="surface-card story-detail">
+      <div class="card-head">
+        <div>
+          <p class="eyebrow">Full experience</p>
+          <h4>${escapeHtml(story.studentName)}</h4>
+          <p class="subtle">${escapeHtml(story.programme)} • ${escapeHtml(story.organization)}</p>
+        </div>
+        <span class="badge">${escapeHtml(dateLabel(story.submittedAt))}</span>
+      </div>
+      <div class="inline-list">
+        <span>Form: ${escapeHtml(linkedForm ? linkedForm.title : 'Unknown')}</span>
+        <span>Volume: ${escapeHtml(linkedVolume ? linkedVolume.volumeLabel : 'Unassigned')}</span>
+        <span>Mentor: ${escapeHtml(story.mentor)}</span>
+      </div>
+      <p class="muted-block story-body">${escapeHtml(story.summary)}</p>
+      <div class="item-actions">
+        <button class="button ghost-link" type="button" data-action="student-logout">Logout</button>
+      </div>
+    </article>
+  `;
+}
+
+async function fetchAuthState() {
+  try {
+    const [adminRes, studentRes, activityRes] = await Promise.all([
+      fetch('/api/auth/me', { credentials: 'include' }),
+      fetch('/api/students/me', { credentials: 'include' }),
+      fetch('/api/students/activity', { credentials: 'include' }),
+    ]);
+
+    if (adminRes.ok) {
+      const data = await adminRes.json();
+      adminUser = data.user || null;
+    }
+
+    if (studentRes.ok) {
+      const data = await studentRes.json();
+      studentUser = data.user || null;
+    }
+
+    if (activityRes.ok) {
+      const data = await activityRes.json();
+      state.studentAccounts = data.accounts || [];
+      state.studentActivity = data.events || [];
+    }
+  } catch (error) {
+    console.error('Failed to fetch auth state:', error);
+  }
+}
+
 function renderHome() {
   const forms = getFilteredForms();
   const volumes = state.volumes.slice().sort((left, right) => new Date(right.publishedAt) - new Date(left.publishedAt));
@@ -354,8 +520,45 @@ function renderHome() {
       <div class="two-column" data-home-list>
         <article class="surface-card">
           <div class="card-head">
-            <h3>Highlighted forms</h3>
-            <span class="subtle">Upcoming deadlines</span>
+            <div>
+              <p class="eyebrow">Student experiences</p>
+              <h3>Testimonials from the archive</h3>
+            </div>
+            <span class="subtle">Read the short preview, then unlock the full story</span>
+          </div>
+          <div class="stack">
+            ${recentSubmissions.length
+              ? recentSubmissions
+                  .map(
+                    (submission) => `
+                      <article class="testimonial-card">
+                        <div class="card-title-row">
+                          <div>
+                            <h4>${escapeHtml(submission.studentName)}</h4>
+                            <p class="subtle">${escapeHtml(submission.programme)} • ${escapeHtml(submission.organization)}</p>
+                          </div>
+                          <span class="badge">${escapeHtml(dateLabel(submission.submittedAt))}</span>
+                        </div>
+                        <p class="muted-block">${escapeHtml(getExperienceExcerpt(submission.summary))}</p>
+                        <div class="item-actions">
+                          <button class="button secondary" type="button" data-action="open-experience" data-id="${escapeHtml(submission.id)}">
+                            Read more
+                          </button>
+                        </div>
+                      </article>
+                    `,
+                  )
+                  .join('')
+              : '<p class="muted-block">Student testimonials will appear here after the first submission.</p>'}
+          </div>
+        </article>
+        <article class="surface-card">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Active forms</p>
+              <h3>Current submission windows</h3>
+            </div>
+            <span class="subtle">Simple and current</span>
           </div>
           <div class="stack">
             ${teaserForms
@@ -378,8 +581,11 @@ function renderHome() {
         </article>
         <article class="surface-card">
           <div class="card-head">
-            <h3>Recent volumes</h3>
-            <span class="subtle">Archive preview</span>
+            <div>
+              <p class="eyebrow">Recent volumes</p>
+              <h3>Archive preview</h3>
+            </div>
+            <span class="subtle">Volume-based records</span>
           </div>
           <div class="stack">
             ${teaserVolumes
@@ -548,9 +754,43 @@ function renderArchive() {
 }
 
 function renderAdmin() {
+  if (!elements.adminLoginPanel || !elements.adminDashboard) {
+    return;
+  }
+
+  elements.adminLoginPanel.hidden = Boolean(adminUser);
+  elements.adminDashboard.hidden = !adminUser;
+
+  if (!adminUser) {
+    elements.adminFormCount.textContent = '';
+    elements.adminVolumeCount.textContent = '';
+    elements.adminSubmissionCount.textContent = '';
+    elements.adminStudentCount.textContent = '';
+    elements.adminFormsList.innerHTML = '';
+    elements.adminVolumesList.innerHTML = '';
+    elements.adminSubmissionsList.innerHTML = '';
+    elements.adminStudentActivity.innerHTML = '';
+    if (elements.adminStatus) {
+      elements.adminStatus.innerHTML = '';
+    }
+    return;
+  }
+
+  if (elements.adminStatus) {
+    elements.adminStatus.innerHTML = `
+      <div>
+        <p class="eyebrow">Signed in</p>
+        <strong>${escapeHtml(adminUser.name)}</strong>
+        <p class="subtle">${escapeHtml(adminUser.email)}</p>
+      </div>
+      <button class="button ghost-link" type="button" data-action="admin-logout">Logout</button>
+    `;
+  }
+
   elements.adminFormCount.textContent = `${state.forms.length} forms managed`;
   elements.adminVolumeCount.textContent = `${state.volumes.length} volumes managed`;
   elements.adminSubmissionCount.textContent = `${state.submissions.length} submissions stored`;
+  elements.adminStudentCount.textContent = `${state.studentAccounts.length} registered students`;
 
   // Display analytics summary if available
   const analyticsHtml = document.getElementById('admin-analytics-summary');
@@ -739,6 +979,26 @@ function renderAdmin() {
         })
         .join('')
     : '<p class="muted-block">No submissions have been stored yet.</p>';
+
+  elements.adminStudentActivity.innerHTML = state.studentActivity.length
+    ? state.studentActivity
+        .slice(0, 10)
+        .map(
+          (item) => `
+            <div class="card">
+              <div class="card-title-row">
+                <div>
+                  <h4>${escapeHtml(item.name)}</h4>
+                  <p class="subtle">${escapeHtml(item.email)}</p>
+                </div>
+                <span class="badge">${escapeHtml(item.eventType)}</span>
+              </div>
+              <p class="muted-block">${escapeHtml(dateLabel(String(item.createdAt).slice(0, 10)))} login activity</p>
+            </div>
+          `,
+        )
+        .join('')
+    : '<p class="muted-block">Student registrations and logins will appear here.</p>';
 }
 
 function renderAll() {
@@ -896,6 +1156,93 @@ function updateSubmission(id, formData) {
   notify('Submission updated.');
 }
 
+async function handleAdminLogin(formData) {
+  const payload = {
+    email: String(formData.get('email') || '').trim(),
+    password: String(formData.get('password') || ''),
+  };
+
+  const response = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Admin sign in failed.');
+  }
+
+  adminUser = data.user || null;
+  notify(`Welcome, ${adminUser?.name || 'Admin'}.`);
+  await fetchAnalytics();
+  await fetchAuthState();
+  renderAll();
+}
+
+async function handleStudentRegister(formData) {
+  const payload = {
+    name: String(formData.get('name') || '').trim(),
+    email: String(formData.get('email') || '').trim(),
+    password: String(formData.get('password') || ''),
+  };
+
+  const response = await fetch('/api/students/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Student registration failed.');
+  }
+
+  studentUser = data.user || null;
+  notify(`Account created for ${studentUser?.name || 'student'}.`);
+  await fetchAuthState();
+  renderAll();
+  renderExperienceModal();
+}
+
+async function handleStudentLogin(formData) {
+  const payload = {
+    email: String(formData.get('email') || '').trim(),
+    password: String(formData.get('password') || ''),
+  };
+
+  const response = await fetch('/api/students/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Student sign in failed.');
+  }
+
+  studentUser = data.user || null;
+  notify(`Signed in as ${studentUser?.name || 'student'}.`);
+  await fetchAuthState();
+  renderAll();
+  renderExperienceModal();
+}
+
+async function handleStudentLogout() {
+  await fetch('/api/students/logout', { method: 'POST', credentials: 'include' });
+  studentUser = null;
+  notify('Student session cleared.');
+  await fetchAuthState();
+  renderAll();
+  if (activeExperienceId) {
+    renderExperienceModal();
+  }
+}
+
 function handleFormSubmit(event) {
   const form = event.target;
   if (!(form instanceof HTMLFormElement)) {
@@ -904,6 +1251,21 @@ function handleFormSubmit(event) {
 
   event.preventDefault();
   const mode = form.dataset.form;
+
+  if (mode === 'admin-login') {
+    handleAdminLogin(new FormData(form)).catch((error) => notify(error.message));
+    return;
+  }
+
+  if (mode === 'student-register') {
+    handleStudentRegister(new FormData(form)).catch((error) => notify(error.message));
+    return;
+  }
+
+  if (mode === 'student-login') {
+    handleStudentLogin(new FormData(form)).catch((error) => notify(error.message));
+    return;
+  }
 
   if (mode === 'student-submission') {
     submitStudentExperience(new FormData(form));
@@ -951,6 +1313,31 @@ function handleClick(event) {
 
   const action = button.dataset.action;
   const id = button.dataset.id;
+
+  if (action === 'open-experience') {
+    showExperienceModal(id);
+  }
+
+  if (action === 'close-experience') {
+    hideExperienceModal();
+  }
+
+  if (action === 'student-logout') {
+    handleStudentLogout().catch((error) => notify(error.message));
+  }
+
+  if (action === 'admin-logout') {
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+      .then(() => {
+        adminUser = null;
+        notify('Admin session cleared.');
+        return fetchAuthState();
+      })
+      .then(() => {
+        renderAll();
+      })
+      .catch((error) => notify(error.message));
+  }
 
   if (action === 'delete-form') {
     deleteItem('forms', id, 'Form');
@@ -1013,7 +1400,7 @@ window.addEventListener('DOMContentLoaded', () => {
   bootstrapDefaults();
   trackVisitor();
   fetchAnalytics();
-  renderAll();
+  fetchAuthState().finally(() => renderAll());
   elements.archiveSearch.addEventListener('input', handleArchiveSearch);
   document.addEventListener('submit', handleFormSubmit);
   document.addEventListener('click', handleClick);

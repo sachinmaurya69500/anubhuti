@@ -25,6 +25,7 @@ ADMIN_EMAIL = os.getenv('ADMIN_EMAIL')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 ADMIN_NAME = os.getenv('ADMIN_NAME', 'Admin')
 COOKIE_NAME = 'anubhuti_admin'
+STUDENT_COOKIE_NAME = 'anubhuti_student'
 IS_PRODUCTION = os.getenv('NODE_ENV') == 'production'
 
 # Validate configuration
@@ -48,6 +49,8 @@ def get_request_data():
 client = MongoClient(MONGODB_URI, server_api=ServerApi('1'))
 db = client['anubhuti']
 admins = db['adminusers']
+students = db['studentusers']
+student_activity = db['student_activity']
 forms = db['forms']
 volumes = db['volumes']
 submissions = db['submissions']
@@ -126,6 +129,16 @@ def sign_token(user_id, email, name):
     }
     return jwt.encode(payload, JWT_SECRET, algorithm='HS256')
 
+def sign_student_token(user_id, email, name):
+    """Generate JWT token for a student account."""
+    payload = {
+        'sub': str(user_id),
+        'email': email,
+        'name': name,
+        'exp': datetime.utcnow() + timedelta(days=7),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+
 def verify_auth():
     """Verify JWT token from cookies."""
     token = request.cookies.get(COOKIE_NAME)
@@ -134,6 +147,20 @@ def verify_auth():
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
         user = admins.find_one({'_id': ObjectId(payload['sub'])})
+        if not user:
+            return None
+        return {'id': str(user['_id']), 'name': user['name'], 'email': user['email']}
+    except:
+        return None
+
+def verify_student_auth():
+    """Verify student JWT token from cookies."""
+    token = request.cookies.get(STUDENT_COOKIE_NAME)
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        user = students.find_one({'_id': ObjectId(payload['sub'])})
         if not user:
             return None
         return {'id': str(user['_id']), 'name': user['name'], 'email': user['email']}
@@ -224,6 +251,140 @@ def auth_logout():
     response = jsonify({'ok': True})
     response.delete_cookie(COOKIE_NAME, samesite='Lax')
     return response
+
+@app.route('/api/students/me', methods=['GET'])
+def student_me():
+    """Get current student auth status."""
+    user = verify_student_auth()
+    return jsonify({'user': user})
+
+@app.route('/api/students/register', methods=['POST'])
+def student_register():
+    """Register a student account."""
+    try:
+        data = get_request_data()
+        name = str(data.get('name', '')).strip()
+        email = str(data.get('email', '')).strip().lower()
+        password = data.get('password', '')
+
+        if not name or not email or not password:
+            return jsonify({'message': 'Name, email, and password are required.'}), 400
+
+        if students.find_one({'email': email}):
+            return jsonify({'message': 'An account with this email already exists.'}), 409
+
+        password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        doc = {
+            'name': name,
+            'email': email,
+            'passwordHash': password_hash,
+            'createdAt': datetime.utcnow(),
+            'lastLoginAt': datetime.utcnow(),
+        }
+        result = students.insert_one(doc)
+        doc['_id'] = result.inserted_id
+
+        token = sign_student_token(doc['_id'], doc['email'], doc['name'])
+        response = jsonify({'user': {'id': str(doc['_id']), 'email': doc['email'], 'name': doc['name']}})
+        response.set_cookie(
+            STUDENT_COOKIE_NAME,
+            token,
+            httponly=True,
+            secure=IS_PRODUCTION,
+            samesite='Lax',
+            max_age=7 * 24 * 60 * 60,
+        )
+
+        student_activity.insert_one({
+            'studentId': doc['_id'],
+            'name': doc['name'],
+            'email': doc['email'],
+            'eventType': 'register',
+            'createdAt': datetime.utcnow(),
+        })
+
+        return response, 201
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+@app.route('/api/students/login', methods=['POST'])
+def student_login():
+    """Login a student account."""
+    try:
+        data = get_request_data()
+        email = str(data.get('email', '')).strip().lower()
+        password = data.get('password', '')
+
+        if not email or not password:
+            return jsonify({'message': 'Email and password required.'}), 400
+
+        user = students.find_one({'email': email})
+        if not user or not bcrypt.checkpw(password.encode(), user['passwordHash'].encode()):
+            return jsonify({'message': 'Invalid student credentials.'}), 401
+
+        students.update_one({'_id': user['_id']}, {'$set': {'lastLoginAt': datetime.utcnow()}})
+        token = sign_student_token(user['_id'], user['email'], user['name'])
+        response = jsonify({'user': {'id': str(user['_id']), 'email': user['email'], 'name': user['name']}})
+        response.set_cookie(
+            STUDENT_COOKIE_NAME,
+            token,
+            httponly=True,
+            secure=IS_PRODUCTION,
+            samesite='Lax',
+            max_age=7 * 24 * 60 * 60,
+        )
+
+        student_activity.insert_one({
+            'studentId': user['_id'],
+            'name': user['name'],
+            'email': user['email'],
+            'eventType': 'login',
+            'createdAt': datetime.utcnow(),
+        })
+
+        return response
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+@app.route('/api/students/logout', methods=['POST'])
+def student_logout():
+    """Logout a student account."""
+    response = jsonify({'ok': True})
+    response.delete_cookie(STUDENT_COOKIE_NAME, samesite='Lax')
+    return response
+
+@app.route('/api/students/activity', methods=['GET'])
+@require_auth
+def admin_student_activity():
+    """Get student registration and login history for admin review."""
+    try:
+        recent_events = list(student_activity.find().sort('createdAt', -1).limit(50))
+        accounts = list(students.find().sort('createdAt', -1))
+        return jsonify({
+            'accounts': [
+                {
+                    'id': str(account['_id']),
+                    'name': account.get('name', ''),
+                    'email': account.get('email', ''),
+                    'createdAt': account.get('createdAt').isoformat() if account.get('createdAt') else '',
+                    'lastLoginAt': account.get('lastLoginAt').isoformat() if account.get('lastLoginAt') else '',
+                }
+                for account in accounts
+            ],
+            'events': [
+                {
+                    'id': str(event['_id']),
+                    'studentId': str(event.get('studentId', '')),
+                    'name': event.get('name', ''),
+                    'email': event.get('email', ''),
+                    'eventType': event.get('eventType', ''),
+                    'createdAt': event.get('createdAt').isoformat() if event.get('createdAt') else '',
+                }
+                for event in recent_events
+            ],
+        })
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
 
 @app.route('/api/visitors/track', methods=['POST'])
 def track_visitor():
