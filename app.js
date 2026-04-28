@@ -182,13 +182,14 @@ function persist() {
 async function trackVisitor() {
   try {
     let visitorId = window.localStorage.getItem(VISITOR_ID_KEY);
+    const payload = new URLSearchParams({
+      page: getActivePage(),
+      formId: '',
+    });
     const response = await fetch('/api/visitors/track', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        page: getActivePage(),
-        formId: '',
-      }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: payload,
       credentials: 'include',
     });
 

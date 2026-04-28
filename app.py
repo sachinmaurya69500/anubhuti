@@ -35,6 +35,15 @@ for var, name in [(MONGODB_URI, 'MONGODB_URI'), (JWT_SECRET, 'JWT_SECRET'),
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
+
+def get_request_data():
+    """Return request payload from JSON or form-encoded bodies."""
+    if request.is_json:
+        return request.get_json(silent=True) or {}
+    if request.form:
+        return request.form.to_dict(flat=True)
+    return {}
+
 # Database setup
 client = MongoClient(MONGODB_URI, server_api=ServerApi('1'))
 db = client['anubhuti']
@@ -184,7 +193,7 @@ def auth_me():
 def auth_login():
     """Admin login."""
     try:
-        data = request.get_json() or {}
+        data = get_request_data()
         email = str(data.get('email', '')).strip().lower()
         password = data.get('password', '')
         
@@ -220,7 +229,7 @@ def auth_logout():
 def track_visitor():
     """Track site visitor."""
     try:
-        data = request.get_json() or {}
+        data = get_request_data()
         visitor_id = request.headers.get('X-Visitor-Id', f'visitor-{int(datetime.utcnow().timestamp())}-{id(request)}')
         
         visitors.insert_one({
@@ -293,7 +302,7 @@ def get_forms():
 def create_form():
     """Create form."""
     try:
-        data = request.get_json() or {}
+        data = get_request_data()
         if not all(k in data for k in ['title', 'category', 'deadline', 'description']):
             return jsonify({'message': 'Missing required fields.'}), 400
         
@@ -318,7 +327,7 @@ def create_form():
 def update_form(form_id):
     """Update form."""
     try:
-        data = request.get_json() or {}
+        data = get_request_data()
         result = forms.update_one(
             {'_id': ObjectId(form_id)},
             {'$set': data}
@@ -358,7 +367,7 @@ def get_volumes():
 def create_volume():
     """Create volume."""
     try:
-        data = request.get_json() or {}
+        data = get_request_data()
         if not all(k in data for k in ['volumeLabel', 'year', 'publishedAt', 'description']):
             return jsonify({'message': 'Missing required fields.'}), 400
         
@@ -381,7 +390,7 @@ def create_volume():
 def update_volume(volume_id):
     """Update volume."""
     try:
-        data = request.get_json() or {}
+        data = get_request_data()
         result = volumes.update_one(
             {'_id': ObjectId(volume_id)},
             {'$set': data}
@@ -419,7 +428,7 @@ def get_submissions():
 def create_submission():
     """Create submission."""
     try:
-        data = request.get_json() or {}
+        data = get_request_data()
         required = ['formId', 'studentName', 'rollNumber', 'programme', 'organization', 'mentor', 'duration', 'summary']
         if not all(k in data for k in required):
             return jsonify({'message': 'Missing required fields.'}), 400
@@ -457,7 +466,7 @@ def create_submission():
 def update_submission(submission_id):
     """Update submission."""
     try:
-        data = request.get_json() or {}
+        data = get_request_data()
         result = submissions.update_one(
             {'_id': ObjectId(submission_id)},
             {'$set': data}
