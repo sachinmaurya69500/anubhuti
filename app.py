@@ -4,7 +4,7 @@ from functools import wraps
 from io import BytesIO
 import jwt
 import bcrypt
-from flask import Flask, jsonify, request, send_file, send_from_directory
+from flask import Flask, jsonify, request, send_file, send_from_directory, render_template, redirect
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from bson.objectid import ObjectId
@@ -34,7 +34,7 @@ for var, name in [(MONGODB_URI, 'MONGODB_URI'), (JWT_SECRET, 'JWT_SECRET'),
     if not var:
         raise ValueError(f'Missing {name}. Check your .env file.')
 
-app = Flask(__name__, static_folder='.', static_url_path='')
+app = Flask(__name__, static_folder='.', static_url_path='', template_folder='templates')
 
 
 def get_request_data():
@@ -213,12 +213,19 @@ def bootstrap():
 @app.route('/api/auth/me', methods=['GET'])
 def auth_me():
     """Get current auth status."""
-    user = verify_auth()
-    return jsonify({'user': user})
+    admin_user = verify_auth()
+    if admin_user:
+        return jsonify({'user': admin_user, 'role': 'admin'})
+
+    student_user = verify_student_auth()
+    if student_user:
+        return jsonify({'user': student_user, 'role': 'student'})
+
+    return jsonify({'user': None, 'role': None})
 
 @app.route('/api/auth/login', methods=['POST'])
 def auth_login():
-    """Admin login."""
+    """Login an admin or student account."""
     try:
         data = get_request_data()
         email = str(data.get('email', '')).strip().lower()
@@ -227,29 +234,55 @@ def auth_login():
         if not email or not password:
             return jsonify({'message': 'Email and password required.'}), 400
         
-        user = admins.find_one({'email': email})
-        if not user or not bcrypt.checkpw(password.encode(), user['passwordHash'].encode()):
-            return jsonify({'message': 'Invalid admin credentials.'}), 401
-        
-        token = sign_token(user['_id'], user['email'], user['name'])
-        response = jsonify({'user': {'id': str(user['_id']), 'email': user['email'], 'name': user['name']}})
-        response.set_cookie(
-            COOKIE_NAME,
-            token,
-            httponly=True,
-            secure=IS_PRODUCTION,
-            samesite='Lax',
-            max_age=7 * 24 * 60 * 60,
-        )
-        return response
+        admin_user = admins.find_one({'email': email})
+        if admin_user and bcrypt.checkpw(password.encode(), admin_user['passwordHash'].encode()):
+            token = sign_token(admin_user['_id'], admin_user['email'], admin_user['name'])
+            response = jsonify({'user': {'id': str(admin_user['_id']), 'email': admin_user['email'], 'name': admin_user['name']}, 'role': 'admin'})
+            response.set_cookie(
+                COOKIE_NAME,
+                token,
+                httponly=True,
+                secure=IS_PRODUCTION,
+                samesite='Lax',
+                max_age=7 * 24 * 60 * 60,
+            )
+            response.delete_cookie(STUDENT_COOKIE_NAME, samesite='Lax')
+            return response
+
+        student_user = students.find_one({'email': email})
+        if student_user and bcrypt.checkpw(password.encode(), student_user['passwordHash'].encode()):
+            students.update_one({'_id': student_user['_id']}, {'$set': {'lastLoginAt': datetime.utcnow()}})
+            token = sign_student_token(student_user['_id'], student_user['email'], student_user['name'])
+            response = jsonify({'user': {'id': str(student_user['_id']), 'email': student_user['email'], 'name': student_user['name']}, 'role': 'student'})
+            response.set_cookie(
+                STUDENT_COOKIE_NAME,
+                token,
+                httponly=True,
+                secure=IS_PRODUCTION,
+                samesite='Lax',
+                max_age=7 * 24 * 60 * 60,
+            )
+            response.delete_cookie(COOKIE_NAME, samesite='Lax')
+
+            student_activity.insert_one({
+                'studentId': student_user['_id'],
+                'name': student_user['name'],
+                'email': student_user['email'],
+                'eventType': 'login',
+                'createdAt': datetime.utcnow(),
+            })
+            return response
+
+        return jsonify({'message': 'Invalid login credentials.'}), 401
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
 def auth_logout():
-    """Admin logout."""
+    """Logout any signed-in account."""
     response = jsonify({'ok': True})
     response.delete_cookie(COOKIE_NAME, samesite='Lax')
+    response.delete_cookie(STUDENT_COOKIE_NAME, samesite='Lax')
     return response
 
 @app.route('/api/students/me', methods=['GET'])
@@ -284,17 +317,6 @@ def student_register():
         result = students.insert_one(doc)
         doc['_id'] = result.inserted_id
 
-        token = sign_student_token(doc['_id'], doc['email'], doc['name'])
-        response = jsonify({'user': {'id': str(doc['_id']), 'email': doc['email'], 'name': doc['name']}})
-        response.set_cookie(
-            STUDENT_COOKIE_NAME,
-            token,
-            httponly=True,
-            secure=IS_PRODUCTION,
-            samesite='Lax',
-            max_age=7 * 24 * 60 * 60,
-        )
-
         student_activity.insert_one({
             'studentId': doc['_id'],
             'name': doc['name'],
@@ -303,7 +325,7 @@ def student_register():
             'createdAt': datetime.utcnow(),
         })
 
-        return response, 201
+        return jsonify({'user': {'id': str(doc['_id']), 'email': doc['email'], 'name': doc['name']}, 'message': 'Registration complete. Please log in.'}), 201
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 

@@ -1,0 +1,98 @@
+{% extends "index.html" %}
+
+{% block title %}Home - Anubhuti | Dev Sanskriti Vishwavidyalaya{% endblock %}
+
+{% block content %}
+<section class="hero-card page">
+  <div class="hero-copy">
+    <p class="eyebrow">Internship experience portal</p>
+    <h2>Student experiences, forms, and archives.</h2>
+    <p class="lead">
+      A straightforward portal for submitting internship experiences, viewing archive volumes, and managing records.
+    </p>
+    <div class="hero-actions">
+      <a class="button primary" href="/forms">Submit</a>
+      <a class="button secondary" href="/auth">Login</a>
+    </div>
+  </div>
+</section>
+
+<section class="content-section">
+  <div class="section-header">
+    <h2>How It Works</h2>
+  </div>
+  <div class="cards-grid">
+    <div class="card">
+      <h3>Submit Your Experience</h3>
+      <p>Fill out a form to share your internship or field work experience with details about your role, organization, and learnings.</p>
+    </div>
+    <div class="card">
+      <h3>Admin Reviews</h3>
+      <p>Our team reviews your submission to ensure it meets our standards before featuring it on the site.</p>
+    </div>
+    <div class="card">
+      <h3>Published in Archives</h3>
+      <p>Once approved, your experience is published in our archive volumes for future students to read and learn from.</p>
+    </div>
+  </div>
+</section>
+
+<section class="testimonials-section">
+  <div class="section-header">
+    <h2>Student Testimonials</h2>
+    <p class="subtitle">Read what past interns have shared about their experiences</p>
+  </div>
+  
+  <div id="testimonials-list" class="testimonials-grid">
+    <!-- Loaded dynamically from API -->
+  </div>
+</section>
+
+<script>
+  (async function() {
+    try {
+      const res = await fetch('/api/submissions?approved=true');
+      const submissions = await res.json();
+      
+      const container = document.getElementById('testimonials-list');
+      if (!submissions || submissions.length === 0) {
+        container.innerHTML = '<p class="empty-state">No testimonials yet.</p>';
+        return;
+      }
+      
+      container.innerHTML = submissions.slice(0, 6).map(sub => `
+        <div class="card testimonial-card">
+          <h3>${escapeHtml(sub.studentName)}</h3>
+          <p class="meta">${escapeHtml(sub.organization)} • ${sub.duration || 'N/A'}</p>
+          <p>${escapeHtml(sub.summary)}</p>
+          <button class="button secondary button-sm" onclick="openTestimonialModal('${escapeHtml(sub.id)}')">Read More</button>
+        </div>
+      `).join('');
+    } catch (err) {
+      console.error('Error loading testimonials:', err);
+    }
+  })();
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function openTestimonialModal(subId) {
+    const authRes = fetch('/api/auth/me').then(r => r.json());
+    authRes.then(auth => {
+      if (!auth.role) {
+        alert('Please login to read the full testimonial.');
+        window.location.href = '/auth';
+        return;
+      }
+      // Load full submission
+      fetch(`/api/submissions/${subId}`).then(r => r.json()).then(sub => {
+        // Show modal (implement modal UI)
+        alert(`${sub.studentName}\n${sub.organization}\n\n${sub.summary}`);
+      });
+    });
+  }
+</script>
+{% endblock %}

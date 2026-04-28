@@ -1,0 +1,231 @@
+{% extends "index.html" %}
+
+{% block title %}Admin Panel - Anubhuti | Dev Sanskriti Vishwavidyalaya{% endblock %}
+
+{% block content %}
+<section class="content-section">
+  <div class="section-header">
+    <h2>Admin Panel</h2>
+    <p class="subtitle">Manage forms, verify submissions, and view analytics</p>
+  </div>
+
+  {% if auth_role != 'admin' %}
+    <div class="alert alert-error">
+      <p>Access denied. You must be an administrator to view this page.</p>
+      <a href="/">Return to Home</a>
+    </div>
+  {% else %}
+    <div class="admin-nav">
+      <a href="/admin" class="tab active">Dashboard</a>
+      <a href="/admin/verify" class="tab">Verify Submissions</a>
+      <a href="/admin/logs" class="tab">Visit Logs</a>
+    </div>
+
+    <div class="admin-dashboard">
+      <div class="dashboard-grid-3">
+        <div class="card stat-card">
+          <h4>Total Submissions</h4>
+          <p class="stat-number" id="total-submissions">0</p>
+        </div>
+        <div class="card stat-card">
+          <h4>Pending Review</h4>
+          <p class="stat-number pending" id="pending-submissions">0</p>
+        </div>
+        <div class="card stat-card">
+          <h4>Approved</h4>
+          <p class="stat-number approved" id="approved-submissions">0</p>
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <h3>Recent Submissions</h3>
+        <div id="recent-submissions" class="submissions-table">
+          <!-- Loaded dynamically -->
+        </div>
+      </div>
+
+      <div class="admin-section">
+        <h3>Forms Management</h3>
+        <div id="forms-list" class="forms-table">
+          <!-- Loaded dynamically -->
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</section>
+
+<script>
+  (async function() {
+    try {
+      const authRes = await fetch('/api/auth/me', { credentials: 'include' });
+      const auth = await authRes.json();
+      
+      if (auth.role !== 'admin') {
+        document.querySelector('.admin-dashboard').style.display = 'none';
+        return;
+      }
+
+      // Load stats
+      const subsRes = await fetch('/api/submissions');
+      const submissions = await subsRes.json();
+      
+      const total = submissions.length;
+      const pending = submissions.filter(s => s.status === 'pending').length;
+      const approved = submissions.filter(s => s.status === 'approved').length;
+      
+      document.getElementById('total-submissions').textContent = total;
+      document.getElementById('pending-submissions').textContent = pending;
+      document.getElementById('approved-submissions').textContent = approved;
+
+      // Load recent submissions
+      const recentList = document.getElementById('recent-submissions');
+      if (submissions.length > 0) {
+        recentList.innerHTML = `
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #1e4f8a;">
+                <th style="text-align: left; padding: 0.75rem;">Student</th>
+                <th style="text-align: left; padding: 0.75rem;">Organization</th>
+                <th style="text-align: left; padding: 0.75rem;">Status</th>
+                <th style="text-align: left; padding: 0.75rem;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${submissions.slice(0, 10).map(sub => `
+                <tr style="border-bottom: 1px solid #eee;">
+                  <td style="padding: 0.75rem;">${escapeHtml(sub.studentName)}</td>
+                  <td style="padding: 0.75rem;">${escapeHtml(sub.organization)}</td>
+                  <td style="padding: 0.75rem;">
+                    <span style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 4px; 
+                      background: ${sub.status === 'approved' ? '#d4edda' : sub.status === 'rejected' ? '#f8d7da' : '#fff3cd'};
+                      color: ${sub.status === 'approved' ? '#155724' : sub.status === 'rejected' ? '#721c24' : '#856404'};
+                      font-size: 0.85rem; font-weight: 600;">
+                      ${sub.status.toUpperCase()}
+                    </span>
+                  </td>
+                  <td style="padding: 0.75rem;">
+                    <a href="/admin/verify?id=${sub.id}" class="button secondary button-sm">Review</a>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } else {
+        recentList.innerHTML = '<p class="empty-state">No submissions yet.</p>';
+      }
+
+      // Load forms
+      const formsRes = await fetch('/api/forms');
+      const forms = await formsRes.json();
+      const formsList = document.getElementById('forms-list');
+      if (forms.length > 0) {
+        formsList.innerHTML = forms.map(form => `
+          <div class="card form-card">
+            <h4>${escapeHtml(form.title)}</h4>
+            <p>${escapeHtml(form.description)}</p>
+            <p class="meta">Category: ${form.category} • Deadline: ${form.deadline}</p>
+            <p class="meta">Submissions: ${form.submissionCount}</p>
+            <button class="button secondary button-sm" onclick="editForm('${form.id}')">Edit</button>
+            <button class="button secondary button-sm" onclick="deleteForm('${form.id}')">Delete</button>
+          </div>
+        `).join('');
+      }
+    } catch (err) {
+      console.error('Error loading admin dashboard:', err);
+    }
+  })();
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function editForm(formId) {
+    alert('Edit form functionality to be implemented');
+  }
+
+  function deleteForm(formId) {
+    if (confirm('Are you sure you want to delete this form?')) {
+      fetch(`/api/forms/${formId}`, { method: 'DELETE', credentials: 'include' })
+        .then(() => {
+          alert('Form deleted');
+          location.reload();
+        })
+        .catch(err => alert('Error deleting form'));
+    }
+  }
+</script>
+
+<style>
+  .admin-nav {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  .admin-nav .tab {
+    padding: 0.75rem 1.5rem;
+    text-decoration: none;
+    color: #666;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .admin-nav .tab.active {
+    color: #1e4f8a;
+    border-bottom-color: #1e4f8a;
+  }
+
+  .dashboard-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: #f6f8fc;
+    border-left: 4px solid #1e4f8a;
+  }
+
+  .stat-number {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #1e4f8a;
+    margin: 0.5rem 0 0 0;
+  }
+
+  .stat-number.pending {
+    color: #ffc107;
+  }
+
+  .stat-number.approved {
+    color: #28a745;
+  }
+
+  .admin-section {
+    margin-bottom: 3rem;
+  }
+
+  .admin-section h3 {
+    margin-bottom: 1.5rem;
+    color: #1e4f8a;
+  }
+
+  .submissions-table {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .forms-table {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+  }
+</style>
+{% endblock %}

@@ -11,18 +11,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="backdrop backdrop-one"></div>
-    <div class="backdrop backdrop-two"></div>
-
     <header class="site-header">
       <div class="brand-block">
-        <div class="brand-mark">A</div>
+        <img class="brand-logo" src="assets/dsvv_logo.jpeg" alt="Dev Sanskriti Vishwavidyalaya logo" />
         <div>
           <p class="eyebrow">Anubhuti</p>
           <h1>Dev Sanskriti Vishwavidyalaya</h1>
@@ -31,10 +28,11 @@
 
       <nav class="site-nav" aria-label="Primary">
         <a href="#home" data-route="home">Home</a>
-        <a href="#about" data-route="about">About DSVV</a>
         <a href="#forms" data-route="forms">Forms</a>
         <a href="#archive" data-route="archive">Archive</a>
-        <a href="#admin" data-route="admin">Admin</a>
+        <a href="#auth" data-route="auth" id="login-nav-link">Login</a>
+        <a href="#dashboard" data-route="dashboard" id="dashboard-nav-link" hidden>Dashboard</a>
+        <a href="#admin" data-route="admin" id="admin-nav-link" hidden>Admin</a>
       </nav>
     </header>
 
@@ -42,13 +40,13 @@
       <section class="hero-card page" id="home" data-page="home">
         <div class="hero-copy">
           <p class="eyebrow">Internship experience portal</p>
-          <h2>Student experiences, forms, and archives in one place.</h2>
+          <h2>Student experiences, forms, and archives.</h2>
           <p class="lead">
-            Anubhuti collects student experiences, keeps the form process simple, and gives administrators a clear place to manage records.
+            A straightforward portal for submitting internship experiences, viewing archive volumes, and managing records.
           </p>
           <div class="hero-actions">
             <a class="button primary" href="#forms">Submit</a>
-            <a class="button secondary" href="#admin">Admin login</a>
+            <a class="button secondary" href="#auth">Login</a>
           </div>
           <div class="stat-grid" id="home-stats"></div>
         </div>
@@ -62,62 +60,110 @@
           <div class="panel-card">
             <p>Archive volumes</p>
             <strong id="volume-count">0</strong>
-            <span>Published collections from submitted internship stories.</span>
+            <span>Published collections of submitted experiences.</span>
           </div>
           <div class="panel-card">
             <p>Student submissions</p>
             <strong id="submission-count">0</strong>
-            <span>Saved locally in this prototype for fast demo use.</span>
+            <span>Recent entries from student submissions.</span>
           </div>
         </aside>
 
         <div class="full-width stack" id="home-spotlight"></div>
       </section>
 
-      <section class="content-grid page" id="about" data-page="about" hidden>
+      <section class="content-grid page auth-page" id="auth" data-page="auth" hidden>
         <div class="section-heading">
-          <p class="eyebrow">About DSVV</p>
-          <h2>Service, study, and reflection.</h2>
+          <p class="eyebrow">Authentication</p>
+          <h2>Use one login page for students and administrators.</h2>
         </div>
-        <div class="two-column">
-          <article class="surface-card prose-card">
-            <p>
-              Dev Sanskriti Vishwavidyalaya is shown here as a values-led academic environment where internships, reflection, and service stay connected.
-            </p>
-            <p>
-              The Anubhuti portal keeps that process neat by collecting reflections, organizing them into volumes, and helping administrators manage forms.
-            </p>
+        <div class="two-column auth-layout">
+          <article class="surface-card auth-card">
+            <div class="card-head">
+              <div>
+                <h3>Login</h3>
+                <span class="subtle">Enter your email and password to continue.</span>
+              </div>
+            </div>
+            <form id="auth-login-form" class="stack form-grid" data-form="auth-login">
+              <label>
+                Email
+                <input name="email" type="email" placeholder="name@dsvv.ac.in" aria-label="Email" required />
+              </label>
+              <label>
+                Password
+                <input name="password" type="password" placeholder="Your password" aria-label="Password" required />
+              </label>
+              <button class="button primary full-width" type="submit">Login</button>
+            </form>
           </article>
-          <article class="surface-card timeline-card">
-            <div class="timeline-item">
-              <span>1</span>
+
+          <article class="surface-card auth-card">
+            <div class="card-head">
               <div>
-                <h3>Learning</h3>
-                <p>Students record internship insights alongside academic outcomes.</p>
+                <h3>Register</h3>
+                <span class="subtle">New students must register before logging in.</span>
               </div>
             </div>
-            <div class="timeline-item">
-              <span>2</span>
-              <div>
-                <h3>Archives</h3>
-                <p>Volumes preserve reports and summaries for future reference.</p>
-              </div>
-            </div>
-            <div class="timeline-item">
-              <span>3</span>
-              <div>
-                <h3>Administration</h3>
-                <p>Administrators create forms, edit them, and extend deadlines when needed.</p>
-              </div>
-            </div>
+            <form id="auth-register-form" class="stack form-grid" data-form="student-register">
+              <label>
+                Full name
+                <input name="name" type="text" placeholder="Your name" aria-label="Full name" required />
+              </label>
+              <label>
+                Email
+                <input name="email" type="email" placeholder="student@dsvv.ac.in" aria-label="Email" required />
+              </label>
+              <label>
+                Password
+                <input name="password" type="password" placeholder="Create a password" aria-label="Password" required />
+              </label>
+              <button class="button secondary full-width" type="submit">Register</button>
+            </form>
           </article>
         </div>
+      </section>
+
+      <section class="content-grid page" id="dashboard" data-page="dashboard" hidden>
+        <div class="section-heading">
+          <p class="eyebrow">Dashboard</p>
+          <h2>Welcome back.</h2>
+        </div>
+        <div class="two-column dashboard-layout">
+          <article class="surface-card">
+            <div class="card-head">
+              <div>
+                <h3>Account summary</h3>
+                <span class="subtle">Your current access and profile details.</span>
+              </div>
+            </div>
+            <div id="dashboard-summary" class="stack"></div>
+          </article>
+          <article class="surface-card">
+            <div class="card-head">
+              <div>
+                <h3>Quick actions</h3>
+                <span class="subtle">Continue to the parts of the site you need most.</span>
+              </div>
+            </div>
+            <div id="dashboard-actions" class="stack"></div>
+          </article>
+        </div>
+        <article class="surface-card">
+          <div class="card-head">
+            <div>
+              <h3>Recent experiences</h3>
+              <span class="subtle">Preview available testimonials.</span>
+            </div>
+          </div>
+          <div id="dashboard-experiences" class="stack"></div>
+        </article>
       </section>
 
       <section class="content-grid page" id="forms" data-page="forms" hidden>
         <div class="section-heading">
           <p class="eyebrow">Student forms</p>
-          <h2>Submit your experience before the deadline.</h2>
+          <h2>Submit an experience before the deadline.</h2>
         </div>
         <div class="two-column forms-layout">
           <article class="surface-card">
@@ -131,7 +177,7 @@
           <article class="surface-card">
             <div class="card-head">
               <h3>Submission form</h3>
-              <span class="subtle">Student internship experience</span>
+              <span class="subtle">Experience details</span>
             </div>
             <form id="student-submission-form" class="stack form-grid" data-form="student-submission">
               <label>
@@ -201,26 +247,6 @@
           <p class="eyebrow">Admin panel</p>
           <h2>Sign in to manage forms, volumes, and student records.</h2>
         </div>
-
-        <article class="surface-card auth-card" id="admin-login-panel">
-          <div class="card-head">
-            <div>
-              <h3>Admin sign in</h3>
-              <p class="subtle">Use the admin email and password.</p>
-            </div>
-          </div>
-          <form id="admin-login-form" class="stack form-grid" data-form="admin-login">
-            <label>
-              Admin email
-              <input name="email" type="email" placeholder="admin@dsvv.ac.in" aria-label="Admin email" required />
-            </label>
-            <label>
-              Password
-              <input name="password" type="password" placeholder="Your password" aria-label="Admin password" required />
-            </label>
-            <button class="button primary full-width" type="submit">Open admin panel</button>
-          </form>
-        </article>
 
         <div id="admin-dashboard" hidden>
           <div id="admin-status" class="admin-status"></div>

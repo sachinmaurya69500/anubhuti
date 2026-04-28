@@ -153,6 +153,7 @@ let state = loadState();
 let archiveQuery = '';
 let adminUser = null;
 let studentUser = null;
+let authRole = null;
 let activeExperienceId = null;
 
 const elements = {
@@ -170,6 +171,12 @@ const elements = {
   archiveSearch: document.getElementById('archive-search'),
   archiveMetrics: document.getElementById('archive-metrics'),
   archiveVolumeList: document.getElementById('archive-volume-list'),
+  loginNavLink: document.getElementById('login-nav-link'),
+  dashboardNavLink: document.getElementById('dashboard-nav-link'),
+  adminNavLink: document.getElementById('admin-nav-link'),
+  dashboardSummary: document.getElementById('dashboard-summary'),
+  dashboardActions: document.getElementById('dashboard-actions'),
+  dashboardExperiences: document.getElementById('dashboard-experiences'),
   adminVolumeDefault: document.getElementById('admin-volume-default'),
   adminFormCount: document.getElementById('admin-form-count'),
   adminFormsList: document.getElementById('admin-forms-list'),
@@ -237,7 +244,21 @@ function getActivePage() {
 }
 
 function setActivePage() {
-  const active = getActivePage();
+  const requested = getActivePage();
+  let active = requested;
+
+  if (requested === 'admin' && authRole !== 'admin') {
+    active = authRole ? 'dashboard' : 'auth';
+  }
+
+  if (requested === 'dashboard' && !authRole) {
+    active = 'auth';
+  }
+
+  if (active !== requested) {
+    window.location.hash = `#${active}`;
+  }
+
   elements.pages.forEach((page) => {
     page.hidden = page.dataset.page !== active;
   });
@@ -389,7 +410,7 @@ function renderExperienceModal() {
     return;
   }
 
-  if (!studentUser) {
+  if (!authRole) {
     elements.experienceModalTitle.textContent = 'Register or login to read more';
     elements.experienceModalContent.innerHTML = renderStudentAuthGate(story);
     return;
@@ -423,30 +444,32 @@ function renderExperienceModal() {
 
 async function fetchAuthState() {
   try {
-    const [adminRes, studentRes, activityRes] = await Promise.all([
-      fetch('/api/auth/me', { credentials: 'include' }),
-      fetch('/api/students/me', { credentials: 'include' }),
-      fetch('/api/students/activity', { credentials: 'include' }),
-    ]);
+    const authRes = await fetch('/api/auth/me', { credentials: 'include' });
 
-    if (adminRes.ok) {
-      const data = await adminRes.json();
-      adminUser = data.user || null;
-    }
+    if (authRes.ok) {
+      const data = await authRes.json();
+      authRole = data.role || null;
+      adminUser = data.role === 'admin' ? data.user || null : null;
+      studentUser = data.role === 'student' ? data.user || null : null;
 
-    if (studentRes.ok) {
-      const data = await studentRes.json();
-      studentUser = data.user || null;
-    }
-
-    if (activityRes.ok) {
-      const data = await activityRes.json();
-      state.studentAccounts = data.accounts || [];
-      state.studentActivity = data.events || [];
+      if (data.role === 'admin') {
+        const activityRes = await fetch('/api/students/activity', { credentials: 'include' });
+        if (activityRes.ok) {
+          const activityData = await activityRes.json();
+          state.studentAccounts = activityData.accounts || [];
+          state.studentActivity = activityData.events || [];
+        }
+      }
+    } else {
+      authRole = null;
+      adminUser = null;
+      studentUser = null;
     }
   } catch (error) {
     console.error('Failed to fetch auth state:', error);
   }
+
+  updateNavState();
 }
 
 function renderHome() {
@@ -612,8 +635,109 @@ function renderHome() {
   }
 }
 
-function renderAbout() {
-  return null;
+function renderDashboard() {
+  if (!elements.dashboardSummary || !elements.dashboardActions || !elements.dashboardExperiences) {
+    return;
+  }
+
+  const user = getSignedInUser();
+  if (!user) {
+    elements.dashboardSummary.innerHTML = '';
+    elements.dashboardActions.innerHTML = '';
+    elements.dashboardExperiences.innerHTML = '';
+    return;
+  }
+
+  const roleLabel = authRole === 'admin' ? 'Administrator' : 'Student';
+  const actionLinks = [
+    { label: 'Go to forms', href: '#forms' },
+    { label: 'View archive', href: '#archive' },
+    { label: 'Read testimonials', href: '#home' },
+  ];
+
+  if (authRole === 'admin') {
+    actionLinks.unshift({ label: 'Open admin panel', href: '#admin' });
+  }
+
+  elements.dashboardSummary.innerHTML = `
+    <div class="card">
+      <div class="card-title-row">
+        <div>
+          <p class="eyebrow">Signed in</p>
+          <h4>${escapeHtml(user.name)}</h4>
+        </div>
+        <span class="badge">${roleLabel}</span>
+      </div>
+      <p class="muted-block">${escapeHtml(user.email)}</p>
+      <div class="inline-list">
+        <span>Role: ${roleLabel}</span>
+        <span>Status: Active</span>
+      </div>
+    </div>
+    ${authRole === 'admin'
+      ? `
+        <div class="card">
+          <div class="card-title-row">
+            <div>
+              <h4>Admin overview</h4>
+              <p class="subtle">All pages and records are available to you.</p>
+            </div>
+          </div>
+          <div class="inline-list">
+            <span>Forms: ${state.forms.length}</span>
+            <span>Volumes: ${state.volumes.length}</span>
+            <span>Submissions: ${state.submissions.length}</span>
+          </div>
+        </div>
+      `
+      : `
+        <div class="card">
+          <div class="card-title-row">
+            <div>
+              <h4>Student access</h4>
+              <p class="subtle">Use this dashboard to continue to forms and testimonials.</p>
+            </div>
+          </div>
+          <div class="inline-list">
+            <span>Forms available: ${state.forms.filter((form) => form.status === 'active').length}</span>
+            <span>Archive volumes: ${state.volumes.length}</span>
+          </div>
+        </div>
+      `}
+  `;
+
+  elements.dashboardActions.innerHTML = `${actionLinks
+    .map(
+      (item) => `
+        <a class="button secondary" href="${escapeHtml(item.href)}">${escapeHtml(item.label)}</a>
+      `,
+    )
+    .join('')}
+    <button class="button ghost-link" type="button" data-action="logout-account">Logout</button>
+  `;
+
+  const recentStories = state.submissions.slice(0, 3);
+  elements.dashboardExperiences.innerHTML = recentStories.length
+    ? recentStories
+        .map(
+          (submission) => `
+            <article class="card">
+              <div class="card-title-row">
+                <div>
+                  <h4>${escapeHtml(submission.studentName)}</h4>
+                  <p class="subtle">${escapeHtml(submission.programme)} • ${escapeHtml(submission.organization)}</p>
+                </div>
+                <span class="badge">${escapeHtml(dateLabel(submission.submittedAt))}</span>
+              </div>
+              <p class="muted-block">${escapeHtml(getExperienceExcerpt(submission.summary))}</p>
+              <div class="item-actions">
+                <button class="button secondary" type="button" data-action="open-experience" data-id="${escapeHtml(submission.id)}">Read more</button>
+              </div>
+            </article>
+          `,
+        )
+        .join('')
+    : '<p class="muted-block">No testimonials are available yet.</p>';
 }
 
 function renderForms() {
@@ -754,14 +878,13 @@ function renderArchive() {
 }
 
 function renderAdmin() {
-  if (!elements.adminLoginPanel || !elements.adminDashboard) {
+  if (!elements.adminDashboard) {
     return;
   }
 
-  elements.adminLoginPanel.hidden = Boolean(adminUser);
-  elements.adminDashboard.hidden = !adminUser;
+  elements.adminDashboard.hidden = authRole !== 'admin';
 
-  if (!adminUser) {
+  if (authRole !== 'admin') {
     elements.adminFormCount.textContent = '';
     elements.adminVolumeCount.textContent = '';
     elements.adminSubmissionCount.textContent = '';
@@ -792,7 +915,6 @@ function renderAdmin() {
   elements.adminSubmissionCount.textContent = `${state.submissions.length} submissions stored`;
   elements.adminStudentCount.textContent = `${state.studentAccounts.length} registered students`;
 
-  // Display analytics summary if available
   const analyticsHtml = document.getElementById('admin-analytics-summary');
   if (analyticsHtml && state.analyticsSubmissions.length > 0) {
     const submissionsHtml = state.analyticsSubmissions
@@ -807,14 +929,6 @@ function renderAdmin() {
       .join('');
     analyticsHtml.innerHTML = `<h3>Submissions by Form</h3><div class="stat-grid">${submissionsHtml}</div>`;
   }
-
-  const volumeOptions = state.volumes
-    .map(
-      (volume) => `
-        <option value="${escapeHtml(volume.id)}">${escapeHtml(volume.volumeLabel)} • ${escapeHtml(volume.year)}</option>
-      `,
-    )
-    .join('');
 
   elements.adminVolumeDefault.innerHTML = renderVolumeOptions('', true) || '<option value="">Create a volume first</option>';
   elements.adminFormsList.innerHTML = state.forms
@@ -1006,6 +1120,7 @@ function renderAll() {
   renderHome();
   renderForms();
   renderArchive();
+  renderDashboard();
   renderAdmin();
 }
 
@@ -1156,7 +1271,7 @@ function updateSubmission(id, formData) {
   notify('Submission updated.');
 }
 
-async function handleAdminLogin(formData) {
+async function handleAuthLogin(formData) {
   const payload = {
     email: String(formData.get('email') || '').trim(),
     password: String(formData.get('password') || ''),
@@ -1171,13 +1286,16 @@ async function handleAdminLogin(formData) {
 
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.message || 'Admin sign in failed.');
+    throw new Error(data.message || 'Login failed.');
   }
 
-  adminUser = data.user || null;
-  notify(`Welcome, ${adminUser?.name || 'Admin'}.`);
+  authRole = data.role || null;
+  adminUser = data.role === 'admin' ? data.user || null : null;
+  studentUser = data.role === 'student' ? data.user || null : null;
+  notify(`Welcome, ${getSignedInUser()?.name || 'User'}.`);
   await fetchAnalytics();
   await fetchAuthState();
+  window.location.hash = authRole === 'admin' ? '#admin' : '#dashboard';
   renderAll();
 }
 
@@ -1200,47 +1318,21 @@ async function handleStudentRegister(formData) {
     throw new Error(data.message || 'Student registration failed.');
   }
 
-  studentUser = data.user || null;
-  notify(`Account created for ${studentUser?.name || 'student'}.`);
+  notify(data.message || 'Registration complete. Please log in.');
   await fetchAuthState();
+  window.location.hash = '#auth';
   renderAll();
-  renderExperienceModal();
 }
 
-async function handleStudentLogin(formData) {
-  const payload = {
-    email: String(formData.get('email') || '').trim(),
-    password: String(formData.get('password') || ''),
-  };
-
-  const response = await fetch('/api/students/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(payload),
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.message || 'Student sign in failed.');
-  }
-
-  studentUser = data.user || null;
-  notify(`Signed in as ${studentUser?.name || 'student'}.`);
-  await fetchAuthState();
-  renderAll();
-  renderExperienceModal();
-}
-
-async function handleStudentLogout() {
-  await fetch('/api/students/logout', { method: 'POST', credentials: 'include' });
+async function handleLogout() {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  adminUser = null;
   studentUser = null;
-  notify('Student session cleared.');
+  authRole = null;
+  notify('Session cleared.');
   await fetchAuthState();
+  window.location.hash = '#auth';
   renderAll();
-  if (activeExperienceId) {
-    renderExperienceModal();
-  }
 }
 
 function handleFormSubmit(event) {
@@ -1252,18 +1344,13 @@ function handleFormSubmit(event) {
   event.preventDefault();
   const mode = form.dataset.form;
 
-  if (mode === 'admin-login') {
-    handleAdminLogin(new FormData(form)).catch((error) => notify(error.message));
+  if (mode === 'auth-login') {
+    handleAuthLogin(new FormData(form)).catch((error) => notify(error.message));
     return;
   }
 
   if (mode === 'student-register') {
     handleStudentRegister(new FormData(form)).catch((error) => notify(error.message));
-    return;
-  }
-
-  if (mode === 'student-login') {
-    handleStudentLogin(new FormData(form)).catch((error) => notify(error.message));
     return;
   }
 
@@ -1322,21 +1409,8 @@ function handleClick(event) {
     hideExperienceModal();
   }
 
-  if (action === 'student-logout') {
-    handleStudentLogout().catch((error) => notify(error.message));
-  }
-
-  if (action === 'admin-logout') {
-    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-      .then(() => {
-        adminUser = null;
-        notify('Admin session cleared.');
-        return fetchAuthState();
-      })
-      .then(() => {
-        renderAll();
-      })
-      .catch((error) => notify(error.message));
+  if (action === 'student-logout' || action === 'admin-logout' || action === 'logout-account') {
+    handleLogout().catch((error) => notify(error.message));
   }
 
   if (action === 'delete-form') {

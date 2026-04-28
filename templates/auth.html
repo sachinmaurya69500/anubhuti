@@ -1,0 +1,235 @@
+{% extends "index.html" %}
+
+{% block title %}Login - Anubhuti | Dev Sanskriti Vishwavidyalaya{% endblock %}
+
+{% block content %}
+<section class="auth-page">
+  <div class="auth-container">
+    <div class="auth-panel">
+      <h2>Login</h2>
+      <form id="login-form" onsubmit="handleLogin(event)" class="auth-form">
+        <div class="form-group">
+          <label for="email">Email Address</label>
+          <input 
+            type="email" 
+            id="email" 
+            name="email" 
+            required 
+            placeholder="admin@dsvv.edu or student@dsvv.edu"
+          />
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input 
+            type="password" 
+            id="password" 
+            name="password" 
+            required 
+            placeholder="Enter your password"
+          />
+        </div>
+        <button type="submit" class="button primary full-width">Login</button>
+        <p class="auth-hint">Have admin credentials? Use them to access the admin panel.</p>
+      </form>
+    </div>
+
+    <div class="auth-divider">or</div>
+
+    <div class="auth-panel">
+      <h2>Register as Student</h2>
+      <form id="register-form" onsubmit="handleRegister(event)" class="auth-form">
+        <div class="form-group">
+          <label for="reg-name">Full Name</label>
+          <input 
+            type="text" 
+            id="reg-name" 
+            name="name" 
+            required 
+            placeholder="Your full name"
+          />
+        </div>
+        <div class="form-group">
+          <label for="reg-email">Email Address</label>
+          <input 
+            type="email" 
+            id="reg-email" 
+            name="email" 
+            required 
+            placeholder="your.email@dsvv.edu"
+          />
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Password</label>
+          <input 
+            type="password" 
+            id="reg-password" 
+            name="password" 
+            required 
+            placeholder="Create a password"
+          />
+        </div>
+        <div class="form-group">
+          <label for="reg-confirm">Confirm Password</label>
+          <input 
+            type="password" 
+            id="reg-confirm" 
+            name="confirm" 
+            required 
+            placeholder="Confirm your password"
+          />
+        </div>
+        <button type="submit" class="button primary full-width">Register</button>
+        <p class="auth-hint">After registering, please log in with your credentials.</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<script>
+  function handleLogin(event) {
+    event.preventDefault();
+    const form = document.getElementById('login-form');
+    const email = form.email.value;
+    const password = form.password.value;
+    
+    fetch('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    })
+    .then(r => {
+      if (!r.ok) throw new Error('Login failed');
+      return r.json();
+    })
+    .then(data => {
+      if (data.role === 'admin') {
+        window.location.href = '/admin';
+      } else if (data.role === 'student') {
+        window.location.href = '/dashboard';
+      } else {
+        alert('Login successful, but role not determined.');
+        window.location.href = '/';
+      }
+    })
+    .catch(err => {
+      console.error('Login error:', err);
+      alert('Invalid email or password. Please try again.');
+    });
+  }
+
+  function handleRegister(event) {
+    event.preventDefault();
+    const form = document.getElementById('register-form');
+    const name = form.name.value;
+    const email = form.email.value;
+    const password = form.password.value;
+    const confirm = form.confirm.value;
+    
+    if (password !== confirm) {
+      alert('Passwords do not match.');
+      return;
+    }
+    
+    fetch('/api/students/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password }),
+      headers: { 'Content-Type': 'application/json' },
+    })
+    .then(r => {
+      if (!r.ok) throw new Error('Registration failed');
+      return r.json();
+    })
+    .then(data => {
+      alert('Registration successful! Please log in with your credentials.');
+      document.getElementById('register-form').reset();
+      document.getElementById('login-form').email.focus();
+    })
+    .catch(err => {
+      console.error('Registration error:', err);
+      alert('Registration failed. Email may already be registered.');
+    });
+  }
+</script>
+
+<style>
+  .auth-page {
+    max-width: 1000px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+  }
+  
+  .auth-container {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+  
+  @media (max-width: 768px) {
+    .auth-container {
+      grid-template-columns: 1fr;
+    }
+    .auth-divider {
+      display: none;
+    }
+  }
+  
+  .auth-panel {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  
+  .auth-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #999;
+    font-weight: 600;
+  }
+  
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .form-group label {
+    font-weight: 500;
+    color: #333;
+  }
+  
+  .form-group input {
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-family: Inter, sans-serif;
+  }
+  
+  .form-group input:focus {
+    outline: none;
+    border-color: #1e4f8a;
+    box-shadow: 0 0 0 3px rgba(30, 79, 138, 0.1);
+  }
+  
+  .full-width {
+    width: 100%;
+  }
+  
+  .auth-hint {
+    font-size: 0.85rem;
+    color: #666;
+    margin-top: 0.5rem;
+  }
+</style>
+{% endblock %}

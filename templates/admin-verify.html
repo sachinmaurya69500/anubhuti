@@ -1,0 +1,404 @@
+{% extends "index.html" %}
+
+{% block title %}Verify Submissions - Anubhuti | Dev Sanskriti Vishwavidyalaya{% endblock %}
+
+{% block content %}
+<section class="content-section">
+  <div class="section-header">
+    <h2>Verify Student Submissions</h2>
+    <p class="subtitle">Review and approve/reject student form submissions</p>
+  </div>
+
+  {% if auth_role != 'admin' %}
+    <div class="alert alert-error">
+      <p>Access denied. Only administrators can verify submissions.</p>
+    </div>
+  {% else %}
+    <div class="verify-container">
+      <div class="submission-filter">
+        <button class="filter-btn active" onclick="filterSubmissions('all')">All</button>
+        <button class="filter-btn" onclick="filterSubmissions('pending')">Pending</button>
+        <button class="filter-btn" onclick="filterSubmissions('approved')">Approved</button>
+        <button class="filter-btn" onclick="filterSubmissions('rejected')">Rejected</button>
+      </div>
+
+      <div id="submissions-list" class="submissions-list">
+        <!-- Loaded dynamically -->
+      </div>
+    </div>
+
+    <!-- Submission Detail Modal -->
+    <div id="submission-modal" style="display: none;" class="modal-overlay">
+      <div class="modal-content">
+        <button onclick="closeSubmissionModal()" class="modal-close">&times;</button>
+        <div id="modal-body">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</section>
+
+<script>
+  let allSubmissions = [];
+  let currentFilter = 'all';
+
+  (async function() {
+    try {
+      const authRes = await fetch('/api/auth/me', { credentials: 'include' });
+      const auth = await authRes.json();
+      
+      if (auth.role !== 'admin') {
+        return;
+      }
+
+      // Load all submissions
+      const subsRes = await fetch('/api/submissions');
+      allSubmissions = await subsRes.json();
+      
+      renderSubmissions();
+    } catch (err) {
+      console.error('Error loading submissions:', err);
+    }
+  })();
+
+  function filterSubmissions(status) {
+    currentFilter = status;
+    
+    // Update button states
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    renderSubmissions();
+  }
+
+  function renderSubmissions() {
+    const filtered = currentFilter === 'all' 
+      ? allSubmissions 
+      : allSubmissions.filter(s => s.status === currentFilter);
+
+    const container = document.getElementById('submissions-list');
+    
+    if (filtered.length === 0) {
+      container.innerHTML = `<p class="empty-state">No ${currentFilter === 'all' ? 'submissions' : currentFilter + ' submissions'} found.</p>`;
+      return;
+    }
+
+    container.innerHTML = filtered.map(sub => `
+      <div class="submission-item">
+        <div class="submission-header">
+          <h3>${escapeHtml(sub.studentName)}</h3>
+          <span class="status-badge status-${sub.status}">${sub.status.toUpperCase()}</span>
+        </div>
+        <div class="submission-meta">
+          <p><strong>Email:</strong> ${escapeHtml(sub.email || 'N/A')}</p>
+          <p><strong>Organization:</strong> ${escapeHtml(sub.organization)}</p>
+          <p><strong>Duration:</strong> ${sub.duration}</p>
+          <p><strong>Submitted:</strong> ${sub.submittedAt}</p>
+        </div>
+        <div class="submission-summary">
+          <p>${escapeHtml(sub.summary.substring(0, 200))}...</p>
+        </div>
+        <div class="submission-actions">
+          <button class="button secondary" onclick="viewDetail('${sub.id}')">View Full</button>
+          <button class="button success" onclick="approveSubmission('${sub.id}')" ${sub.status === 'approved' ? 'disabled' : ''}>Approve</button>
+          <button class="button danger" onclick="rejectSubmission('${sub.id}')" ${sub.status === 'rejected' ? 'disabled' : ''}>Reject</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function viewDetail(subId) {
+    const sub = allSubmissions.find(s => s.id === subId);
+    if (!sub) return;
+
+    const modal = document.getElementById('submission-modal');
+    const body = document.getElementById('modal-body');
+    
+    body.innerHTML = `
+      <h2>${escapeHtml(sub.studentName)}</h2>
+      <div class="detail-grid">
+        <div>
+          <h4>Personal Information</h4>
+          <p><strong>Email:</strong> ${escapeHtml(sub.email)}</p>
+          <p><strong>Roll Number:</strong> ${escapeHtml(sub.rollNumber)}</p>
+          <p><strong>Programme:</strong> ${escapeHtml(sub.programme)}</p>
+        </div>
+        <div>
+          <h4>Internship Details</h4>
+          <p><strong>Organization:</strong> ${escapeHtml(sub.organization)}</p>
+          <p><strong>Mentor:</strong> ${escapeHtml(sub.mentor)}</p>
+          <p><strong>Duration:</strong> ${sub.duration}</p>
+          <p><strong>Submitted:</strong> ${sub.submittedAt}</p>
+        </div>
+      </div>
+      <div>
+        <h4>Summary</h4>
+        <p>${escapeHtml(sub.summary)}</p>
+      </div>
+      <div class="decision-actions">
+        <button class="button success" onclick="approveSubmission('${sub.id}'); closeSubmissionModal();">Approve & Close</button>
+        <button class="button danger" onclick="rejectSubmission('${sub.id}'); closeSubmissionModal();">Reject & Close</button>
+        <button class="button secondary" onclick="closeSubmissionModal()">Close</button>
+      </div>
+    `;
+    
+    modal.style.display = 'flex';
+  }
+
+  function closeSubmissionModal() {
+    document.getElementById('submission-modal').style.display = 'none';
+  }
+
+  function approveSubmission(subId) {
+    fetch(`/api/submissions/${subId}/verify`, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'approved' }),
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    })
+    .then(r => r.json())
+    .then(() => {
+      alert('Submission approved!');
+      const idx = allSubmissions.findIndex(s => s.id === subId);
+      if (idx >= 0) allSubmissions[idx].status = 'approved';
+      renderSubmissions();
+    })
+    .catch(err => {
+      console.error('Error approving submission:', err);
+      alert('Error approving submission');
+    });
+  }
+
+  function rejectSubmission(subId) {
+    const reason = prompt('Enter rejection reason (optional):');
+    
+    fetch(`/api/submissions/${subId}/verify`, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'rejected', reason: reason || '' }),
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    })
+    .then(r => r.json())
+    .then(() => {
+      alert('Submission rejected!');
+      const idx = allSubmissions.findIndex(s => s.id === subId);
+      if (idx >= 0) allSubmissions[idx].status = 'rejected';
+      renderSubmissions();
+    })
+    .catch(err => {
+      console.error('Error rejecting submission:', err);
+      alert('Error rejecting submission');
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // Close modal on background click
+  document.getElementById('submission-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeSubmissionModal();
+  });
+</script>
+
+<style>
+  .verify-container {
+    max-width: 1000px;
+  }
+
+  .submission-filter {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .filter-btn {
+    padding: 0.5rem 1.5rem;
+    border: 2px solid #1e4f8a;
+    background: white;
+    color: #1e4f8a;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .filter-btn.active {
+    background: #1e4f8a;
+    color: white;
+  }
+
+  .filter-btn:hover {
+    background: #1e4f8a;
+    color: white;
+  }
+
+  .submissions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .submission-item {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  .submission-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #eee;
+  }
+
+  .submission-header h3 {
+    margin: 0;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .status-pending {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .status-approved {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .status-rejected {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .submission-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+
+  .submission-meta p {
+    margin: 0;
+  }
+
+  .submission-summary {
+    margin: 1rem 0;
+    padding: 1rem;
+    background: #f6f8fc;
+    border-radius: 6px;
+    border-left: 4px solid #1e4f8a;
+  }
+
+  .submission-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .button.success {
+    background: #28a745;
+    color: white;
+    border: none;
+  }
+
+  .button.success:hover {
+    background: #218838;
+  }
+
+  .button.danger {
+    background: #dc3545;
+    color: white;
+    border: none;
+  }
+
+  .button.danger:hover {
+    background: #c82333;
+  }
+
+  .button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Modal Styles */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: none;
+    border: none;
+    font-size: 2rem;
+    cursor: pointer;
+    color: #999;
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin: 1.5rem 0;
+  }
+
+  .decision-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 768px) {
+    .detail-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .modal-content {
+      max-width: 90vw;
+      padding: 1rem;
+    }
+  }
+</style>
+{% endblock %}

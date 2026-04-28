@@ -1,0 +1,153 @@
+{% extends "index.html" %}
+
+{% block title %}Forms - Anubhuti | Dev Sanskriti Vishwavidyalaya{% endblock %}
+
+{% block content %}
+<section class="content-section">
+  <div class="section-header">
+    <h2>Submit Your Experience</h2>
+    <p class="subtitle">Share your internship or field work experience</p>
+  </div>
+
+  {% if not auth_role %}
+    <div class="alert alert-info">
+      <p>You must <a href="/auth">log in</a> to submit a form.</p>
+    </div>
+  {% endif %}
+
+  <div class="forms-list">
+    <div id="forms-container">
+      <!-- Loaded dynamically from API -->
+    </div>
+  </div>
+</section>
+
+<script>
+  (async function() {
+    try {
+      const res = await fetch('/api/forms');
+      const forms = await res.json();
+      
+      const container = document.getElementById('forms-container');
+      if (!forms || forms.length === 0) {
+        container.innerHTML = '<p class="empty-state">No active forms available.</p>';
+        return;
+      }
+      
+      const isAuth = await fetch('/api/auth/me').then(r => r.json()).then(a => a.role);
+      
+      container.innerHTML = forms.map(form => `
+        <div class="card form-card">
+          <h3>${escapeHtml(form.title)}</h3>
+          <p class="meta">${escapeHtml(form.category)} • Deadline: ${form.deadline}</p>
+          <p>${escapeHtml(form.description)}</p>
+          <p class="submissions-count">Submissions: ${form.submissionCount}</p>
+          <button 
+            class="button primary button-sm" 
+            onclick="loadFormModal('${form.id}')"
+            ${!isAuth ? 'disabled title="Login required"' : ''}
+          >
+            Submit
+          </button>
+        </div>
+      `).join('');
+    } catch (err) {
+      console.error('Error loading forms:', err);
+    }
+  })();
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function loadFormModal(formId) {
+    // Show submission form modal
+    const formHtml = `
+      <div class="modal">
+        <div class="modal-content">
+          <h3>Submit Response</h3>
+          <form id="submission-form" onsubmit="handleSubmit(event, '${formId}')">
+            <div class="form-group">
+              <label for="studentName">Student Name *</label>
+              <input type="text" id="studentName" name="studentName" required />
+            </div>
+            <div class="form-group">
+              <label for="email">Email *</label>
+              <input type="email" id="email" name="email" required />
+            </div>
+            <div class="form-group">
+              <label for="rollNumber">Roll Number *</label>
+              <input type="text" id="rollNumber" name="rollNumber" required />
+            </div>
+            <div class="form-group">
+              <label for="programme">Programme *</label>
+              <input type="text" id="programme" name="programme" required />
+            </div>
+            <div class="form-group">
+              <label for="organization">Organization *</label>
+              <input type="text" id="organization" name="organization" required />
+            </div>
+            <div class="form-group">
+              <label for="mentor">Mentor/Supervisor *</label>
+              <input type="text" id="mentor" name="mentor" required />
+            </div>
+            <div class="form-group">
+              <label for="duration">Duration *</label>
+              <input type="text" id="duration" name="duration" placeholder="e.g. 6 weeks" required />
+            </div>
+            <div class="form-group">
+              <label for="summary">Experience Summary *</label>
+              <textarea id="summary" name="summary" rows="6" required></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="button primary">Submit</button>
+              <button type="button" class="button secondary" onclick="closeModal()">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', formHtml);
+  }
+
+  function handleSubmit(event, formId) {
+    event.preventDefault();
+    const form = document.getElementById('submission-form');
+    const formData = new FormData(form);
+    
+    fetch('/api/submissions', {
+      method: 'POST',
+      body: JSON.stringify({
+        formId: formId,
+        studentName: formData.get('studentName'),
+        email: formData.get('email'),
+        rollNumber: formData.get('rollNumber'),
+        programme: formData.get('programme'),
+        organization: formData.get('organization'),
+        mentor: formData.get('mentor'),
+        duration: formData.get('duration'),
+        summary: formData.get('summary'),
+      }),
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    })
+    .then(r => r.json())
+    .then(data => {
+      alert('Submission received! It will be reviewed by our team.');
+      closeModal();
+      location.reload();
+    })
+    .catch(err => {
+      console.error('Error submitting form:', err);
+      alert('Error submitting form. Please try again.');
+    });
+  }
+
+  function closeModal() {
+    const modal = document.querySelector('.modal');
+    if (modal) modal.remove();
+  }
+</script>
+{% endblock %}

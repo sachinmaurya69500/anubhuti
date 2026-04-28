@@ -1,0 +1,144 @@
+{% extends "index.html" %}
+
+{% block title %}Dashboard - Anubhuti | Dev Sanskriti Vishwavidyalaya{% endblock %}
+
+{% block content %}
+<section class="content-section">
+  <div class="section-header">
+    <h2>Student Dashboard</h2>
+  </div>
+
+  {% if not auth_role %}
+    <div class="alert alert-warning">
+      <p>Please <a href="/auth">log in</a> to access your dashboard.</p>
+    </div>
+  {% else %}
+    <div id="dashboard-summary" class="dashboard-grid">
+      <!-- Loaded dynamically -->
+    </div>
+
+    <div id="dashboard-forms" class="dashboard-section">
+      <h3>Available Forms</h3>
+      <div id="forms-list">
+        <!-- Loaded dynamically -->
+      </div>
+    </div>
+
+    <div id="dashboard-submissions" class="dashboard-section">
+      <h3>Your Submissions</h3>
+      <div id="submissions-list">
+        <!-- Loaded dynamically -->
+      </div>
+    </div>
+  {% endif %}
+</section>
+
+<script>
+  (async function() {
+    try {
+      const authRes = await fetch('/api/auth/me', { credentials: 'include' });
+      const auth = await authRes.json();
+      
+      if (!auth.role) {
+        window.location.href = '/auth';
+        return;
+      }
+
+      // Load dashboard summary
+      const summaryContainer = document.getElementById('dashboard-summary');
+      if (auth.user) {
+        summaryContainer.innerHTML = `
+          <div class="card summary-card">
+            <h3>Welcome, ${escapeHtml(auth.user.name || auth.user.email)}</h3>
+            <p>You are logged in as a student. Submit your experiences or explore archive volumes.</p>
+          </div>
+        `;
+      }
+
+      // Load forms
+      const formsRes = await fetch('/api/forms');
+      const forms = await formsRes.json();
+      const formsList = document.getElementById('forms-list');
+      if (forms && forms.length > 0) {
+        formsList.innerHTML = forms.map(form => `
+          <div class="card form-card">
+            <h4>${escapeHtml(form.title)}</h4>
+            <p>${escapeHtml(form.description)}</p>
+            <a href="/forms" class="button secondary button-sm">View Form</a>
+          </div>
+        `).join('');
+      } else {
+        formsList.innerHTML = '<p class="empty-state">No active forms.</p>';
+      }
+
+      // Load user's submissions
+      const subsRes = await fetch('/api/submissions?submittedBy=' + auth.user.email);
+      const submissions = await subsRes.json();
+      const subsList = document.getElementById('submissions-list');
+      if (submissions && submissions.length > 0) {
+        subsList.innerHTML = submissions.map(sub => {
+          const statusColor = sub.status === 'approved' ? '#28a745' : 
+                            sub.status === 'rejected' ? '#dc3545' : '#ffc107';
+          return `
+            <div class="card submission-card">
+              <h4>${escapeHtml(sub.studentName)}</h4>
+              <p class="meta">
+                Organization: ${escapeHtml(sub.organization)} 
+                <span style="display: inline-block; margin-left: 1rem; color: ${statusColor}; font-weight: 600;">
+                  ${sub.status.toUpperCase()}
+                </span>
+              </p>
+              <p>${escapeHtml(sub.summary.substring(0, 150))}...</p>
+              <p class="meta">Submitted: ${sub.submittedAt}</p>
+            </div>
+          `;
+        }).join('');
+      } else {
+        subsList.innerHTML = '<p class="empty-state">You have not submitted any forms yet.</p>';
+      }
+    } catch (err) {
+      console.error('Error loading dashboard:', err);
+    }
+  })();
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+
+<style>
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .dashboard-section {
+    margin-bottom: 3rem;
+  }
+
+  .dashboard-section h3 {
+    margin-bottom: 1rem;
+    color: #1e4f8a;
+    font-size: 1.3rem;
+  }
+
+  .summary-card {
+    background: linear-gradient(135deg, #e7f0fb 0%, #fff3c2 100%);
+    border-left: 4px solid #1e4f8a;
+  }
+
+  .submission-card {
+    border-left: 4px solid #c79a10;
+  }
+
+  .submission-card .meta {
+    font-size: 0.9rem;
+    color: #666;
+    margin: 0.5rem 0;
+  }
+</style>
+{% endblock %}

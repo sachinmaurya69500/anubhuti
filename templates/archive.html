@@ -1,0 +1,72 @@
+{% extends "index.html" %}
+
+{% block title %}Archive - Anubhuti | Dev Sanskriti Vishwavidyalaya{% endblock %}
+
+{% block content %}
+<section class="content-section">
+  <div class="section-header">
+    <h2>Archive Volumes</h2>
+    <p class="subtitle">Explore published collections of internship experiences</p>
+  </div>
+
+  <div id="volumes-container" class="volumes-list">
+    <!-- Loaded dynamically from API -->
+  </div>
+</section>
+
+<script>
+  (async function() {
+    try {
+      const res = await fetch('/api/volumes');
+      const volumes = await res.json();
+      
+      const container = document.getElementById('volumes-container');
+      if (!volumes || volumes.length === 0) {
+        container.innerHTML = '<p class="empty-state">No archive volumes yet.</p>';
+        return;
+      }
+      
+      container.innerHTML = volumes.map(vol => `
+        <div class="card volume-card">
+          <h3>${escapeHtml(vol.volumeLabel)}</h3>
+          <p class="meta">Year: ${vol.year} • Published: ${vol.publishedAt}</p>
+          <p>${escapeHtml(vol.description)}</p>
+          <p class="items-count">Entries: ${vol.items}</p>
+          <button 
+            class="button primary button-sm" 
+            onclick="viewVolume('${vol.id}')"
+          >
+            View Volume
+          </button>
+        </div>
+      `).join('');
+    } catch (err) {
+      console.error('Error loading volumes:', err);
+    }
+  })();
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function viewVolume(volumeId) {
+    // Load submissions for this volume
+    fetch(`/api/submissions?volumeId=${volumeId}&approved=true`)
+      .then(r => r.json())
+      .then(submissions => {
+        if (!submissions || submissions.length === 0) {
+          alert('No entries in this volume yet.');
+          return;
+        }
+        
+        const list = submissions.map(sub => 
+          `${sub.studentName} - ${sub.organization}`
+        ).join('\n');
+        
+        alert(`Entries in this volume:\n\n${list}`);
+      });
+  }
+</script>
+{% endblock %}
