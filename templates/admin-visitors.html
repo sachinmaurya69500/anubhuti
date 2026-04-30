@@ -1,0 +1,290 @@
+{% extends "index.html" %}
+
+{% block title %}User Logs - Anubhuti | Dev Sanskriti Vishwavidyalaya{% endblock %}
+
+{% block content %}
+<section class="content-section">
+  <div class="section-header">
+    <h2>User Activity Logs</h2>
+    <p class="subtitle">User login, visit, and activity tracking. No credentials displayed.</p>
+  </div>
+
+  {% if auth_role != 'admin' %}
+    <div class="alert alert-error">
+      <p>Access denied. Only administrators can view user logs.</p>
+    </div>
+  {% else %}
+    <div class="logs-container">
+      <div class="logs-filter">
+        <input 
+          type="date" 
+          id="filter-date" 
+          onchange="filterByDate()"
+          style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"
+        />
+        <input 
+          type="text" 
+          id="filter-email" 
+          placeholder="Filter by email"
+          onkeyup="filterLogs()"
+          style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; margin-left: 0.5rem;"
+        />
+        <select id="filter-action" onchange="filterLogs()" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; margin-left: 0.5rem;">
+          <option value="">All Actions</option>
+          <option value="login">Login</option>
+          <option value="logout">Logout</option>
+          <option value="register">Register</option>
+          <option value="form_submit">Form Submit</option>
+          <option value="submission_approved">Submission Approved</option>
+          <option value="submission_rejected">Submission Rejected</option>
+          <option value="page_visit">Page Visit</option>
+        </select>
+      </div>
+
+      <div class="logs-stats">
+        <div class="stat">
+          <span class="stat-label">Total Logs</span>
+          <span class="stat-value" id="total-logs">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Unique Users</span>
+          <span class="stat-value" id="unique-users">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Today</span>
+          <span class="stat-value" id="today-logs">0</span>
+        </div>
+      </div>
+
+      <div id="logs-table" class="logs-table">
+        <!-- Loaded dynamically -->
+      </div>
+    </div>
+  {% endif %}
+</section>
+
+<script>
+  let allLogs = [];
+
+  (async function() {
+    try {
+      const authRes = await fetch('/api/auth/me', { credentials: 'include' });
+      const auth = await authRes.json();
+      
+      if (auth.role !== 'admin') {
+        return;
+      }
+
+      // Load all visit and activity logs
+      const logsRes = await fetch('/api/visit-logs', { credentials: 'include' });
+      allLogs = await logsRes.json();
+      
+      renderLogs(allLogs);
+      updateStats(allLogs);
+    } catch (err) {
+      console.error('Error loading visit logs:', err);
+      document.getElementById('logs-table').innerHTML = '<p class="empty-state">Error loading logs: ' + err.message + '</p>';
+    }
+  })();
+
+  function renderLogs(logs) {
+    const container = document.getElementById('logs-table');
+    
+    if (!logs || logs.length === 0) {
+      container.innerHTML = '<p class="empty-state">No activity logs found.</p>';
+      return;
+    }
+
+    const tableHtml = `
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #f6f8fc; border-bottom: 2px solid #1e4f8a;">
+            <th style="text-align: left; padding: 0.75rem; font-weight: 600;">Timestamp</th>
+            <th style="text-align: left; padding: 0.75rem; font-weight: 600;">User Email</th>
+            <th style="text-align: left; padding: 0.75rem; font-weight: 600;">Action</th>
+            <th style="text-align: left; padding: 0.75rem; font-weight: 600;">Details</th>
+            <th style="text-align: left; padding: 0.75rem; font-weight: 600;">IP Address</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${logs.map(log => `
+            <tr style="border-bottom: 1px solid #eee;">
+              <td style="padding: 0.75rem; font-size: 0.9rem;">${formatTimestamp(log.timestamp)}</td>
+              <td style="padding: 0.75rem;">${escapeHtml(log.userEmail || 'N/A')}</td>
+              <td style="padding: 0.75rem;">
+                <span style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 4px; 
+                  background: ${getActionColor(log.action)}; font-size: 0.85rem; font-weight: 600;">
+                  ${escapeHtml((log.action || 'UNKNOWN').replace(/_/g, ' ').toUpperCase())}
+                </span>
+              </td>
+              <td style="padding: 0.75rem; font-size: 0.9rem;">${escapeHtml(log.page || '-')}</td>
+              <td style="padding: 0.75rem; font-size: 0.85rem; color: #999;">${escapeHtml(log.ipAddress || 'N/A')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+    
+    container.innerHTML = tableHtml;
+  }
+
+  function filterLogs() {
+    const emailFilter = document.getElementById('filter-email').value.toLowerCase();
+    const actionFilter = document.getElementById('filter-action').value;
+    
+    const filtered = allLogs.filter(log => {
+      const emailMatch = !emailFilter || (log.userEmail && log.userEmail.toLowerCase().includes(emailFilter));
+      const actionMatch = !actionFilter || log.action === actionFilter;
+      return emailMatch && actionMatch;
+    });
+    
+    renderLogs(filtered);
+    updateStats(filtered);
+  }
+
+  function filterByDate() {
+    const dateStr = document.getElementById('filter-date').value;
+    if (!dateStr) {
+      renderLogs(allLogs);
+      updateStats(allLogs);
+      return;
+    }
+    
+    const selectedDate = new Date(dateStr);
+    const filtered = allLogs.filter(log => {
+      const logDate = new Date(log.timestamp);
+      return logDate.toDateString() === selectedDate.toDateString();
+    });
+    
+    renderLogs(filtered);
+    updateStats(filtered);
+  }
+
+  function updateStats(logs) {
+    const uniqueUsers = new Set(logs.filter(l => l.userEmail).map(l => l.userEmail)).size;
+    const todayLogs = logs.filter(log => {
+      const logDate = new Date(log.timestamp);
+      const today = new Date();
+      return logDate.toDateString() === today.toDateString();
+    }).length;
+    
+    document.getElementById('total-logs').textContent = logs.length;
+    document.getElementById('unique-users').textContent = uniqueUsers;
+    document.getElementById('today-logs').textContent = todayLogs;
+  }
+
+  function formatTimestamp(ts) {
+    if (!ts) return 'N/A';
+    return new Date(ts).toLocaleString();
+  }
+
+  function getActionColor(action) {
+    const colors = {
+      'login': '#d4edda',
+      'logout': '#e2e3e5',
+      'register': '#cfe2ff',
+      'page_visit': '#fff3cd',
+      'form_submit': '#e7d4f5',
+      'submission_approved': '#d4edda',
+      'submission_rejected': '#f8d7da',
+    };
+    return colors[action] || '#f0f0f0';
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+
+<style>
+  .logs-container {
+    max-width: 1200px;
+  }
+
+  .logs-filter {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .logs-filter input,
+  .logs-filter select {
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: Inter, sans-serif;
+    font-size: 0.9rem;
+  }
+
+  .logs-filter input:focus,
+  .logs-filter select:focus {
+    outline: none;
+    border-color: #1e4f8a;
+    box-shadow: 0 0 0 3px rgba(30, 79, 138, 0.1);
+  }
+
+  .logs-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat {
+    background: #f6f8fc;
+    border-left: 4px solid #1e4f8a;
+    padding: 1.5rem;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stat-label {
+    font-size: 0.9rem;
+    color: #666;
+    font-weight: 500;
+  }
+
+  .stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1e4f8a;
+    margin-top: 0.5rem;
+  }
+
+  .logs-table {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow-x: auto;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  table {
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 768px) {
+    .logs-filter {
+      flex-direction: column;
+    }
+
+    .logs-filter input,
+    .logs-filter select {
+      width: 100%;
+    }
+
+    table {
+      font-size: 0.8rem;
+    }
+
+    table th,
+    table td {
+      padding: 0.5rem !important;
+    }
+  }
+</style>
+{% endblock %}

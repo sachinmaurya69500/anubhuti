@@ -34,7 +34,26 @@ for var, name in [(MONGODB_URI, 'MONGODB_URI'), (JWT_SECRET, 'JWT_SECRET'),
     if not var:
         raise ValueError(f'Missing {name}. Check your .env file.')
 
-app = Flask(__name__, static_folder='.', static_url_path='', template_folder='templates')
+app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
+
+
+@app.context_processor
+def inject_auth():
+    """Inject auth_role and current_user into all templates."""
+    try:
+        admin = verify_auth()
+    except Exception:
+        admin = None
+    try:
+        student = verify_student_auth()
+    except Exception:
+        student = None
+
+    if admin:
+        return {'auth_role': 'admin', 'current_user': admin}
+    if student:
+        return {'auth_role': 'student', 'current_user': student}
+    return {'auth_role': None, 'current_user': None}
 
 
 def get_request_data():
@@ -46,8 +65,17 @@ def get_request_data():
     return {}
 
 # Database setup
-client = MongoClient(MONGODB_URI, server_api=ServerApi('1'))
-db = client['anubhuti']
+try:
+    client = MongoClient(MONGODB_URI, server_api=ServerApi('1'), serverSelectionTimeoutMS=5000)
+    db = client['anubhuti']
+    # Verify connection
+    client.server_info()
+except Exception as e:
+    print(f"Error connecting to MongoDB: {e}")
+    print("Please ensure MONGODB_URI in .env points to a valid MongoDB instance.")
+    print("Get a free cluster at https://www.mongodb.com/cloud/atlas")
+    raise
+
 admins = db['adminusers']
 students = db['studentusers']
 student_activity = db['student_activity']
@@ -181,14 +209,71 @@ def require_auth(f):
 @app.route('/')
 def serve_index():
     """Serve index.html."""
-    return send_from_directory('.', 'index.html')
+    return render_template('index.html')
+
+@app.route('/admin/verify')
+def serve_admin_verify():
+    """Serve admin verify page."""
+    user = verify_auth()
+    if not user:
+        return redirect('/auth')
+    return render_template('admin-verify.html', auth_role='admin')
+
+@app.route('/admin/visitors')
+def serve_admin_visitors():
+    """Serve admin user logs page."""
+    user = verify_auth()
+    if not user:
+        return redirect('/auth')
+    return render_template('admin-visitors.html', auth_role='admin')
 
 @app.route('/<path:path>')
 def serve_static(path):
     """Serve static files."""
     if path.startswith('api/'):
         return jsonify({'message': 'Not found'}), 404
+    # If a corresponding template exists in the templates folder, render it
+    template_path = os.path.join(app.template_folder or 'templates', path)
+    if path.endswith('.html') and os.path.exists(template_path):
+        # render the template (path is the filename under templates)
+        return render_template(path)
+
+    # Otherwise, serve as a static file from project root (styles, assets, js)
     return send_from_directory('.', path)
+
+@app.route('/admin')
+def serve_admin():
+    """Serve admin dashboard page."""
+    user = verify_auth()
+    if not user:
+        return redirect('/auth')
+    return render_template('admin.html', auth_role='admin')
+
+@app.route('/forms')
+def serve_forms():
+    """Serve forms page."""
+    user = verify_student_auth() or verify_auth()
+    role = 'admin' if verify_auth() else 'student' if verify_student_auth() else None
+    return render_template('forms.html', auth_role=role)
+
+@app.route('/auth')
+def serve_auth():
+    """Serve login/registration page."""
+    return render_template('auth.html', auth_role=None)
+
+@app.route('/archive')
+def serve_archive():
+    """Serve archive page."""
+    return render_template('archive.html', auth_role=None)
+
+@app.route('/dashboard')
+def serve_dashboard():
+    """Serve student dashboard page."""
+    user = verify_student_auth() or verify_auth()
+    if not user:
+        return redirect('/auth')
+    role = 'admin' if verify_auth() else 'student' if verify_student_auth() else None
+    return render_template('dashboard.html', auth_role=role, user=user)
 
 @app.route('/api/bootstrap', methods=['GET'])
 def bootstrap():
@@ -197,7 +282,8 @@ def bootstrap():
         user = verify_auth()
         forms_list = [to_client(f) for f in forms.find().sort('deadline', 1)]
         volumes_list = [to_client(v) for v in volumes.find().sort('publishedAt', 1)]
-        submissions_list = [to_client(s) for s in submissions.find().sort('submittedAt', -1)]
+        # Only expose approved submissions to public bootstrap
+        submissions_list = [to_client(s) for s in submissions.find({'status': 'approved'}).sort('submittedAt', -1)]
         total_visitors = visitors.count_documents({})
         
         return jsonify({
@@ -612,7 +698,7 @@ def create_submission():
     """Create submission."""
     try:
         data = get_request_data()
-        required = ['formId', 'studentName', 'rollNumber', 'programme', 'organization', 'mentor', 'duration', 'summary']
+        required = ['formId', 'studentName', 'email', 'rollNumber', 'programme', 'organization', 'mentor', 'duration', 'summary']
         if not all(k in data for k in required):
             return jsonify({'message': 'Missing required fields.'}), 400
         
@@ -624,10 +710,12 @@ def create_submission():
         if form['deadline'] < datetime.utcnow().strftime('%Y-%m-%d'):
             return jsonify({'message': 'Submission deadline passed.'}), 400
         
+        # Mark new submissions as pending verification
         doc = {
             'formId': ObjectId(data['formId']),
             'volumeId': data.get('volumeId', ''),
             'studentName': data['studentName'],
+            'email': data.get('email', ''),
             'rollNumber': data['rollNumber'],
             'programme': data['programme'],
             'organization': data['organization'],
@@ -636,10 +724,23 @@ def create_submission():
             'summary': data['summary'],
             'submittedAt': data.get('submittedAt', datetime.utcnow().strftime('%Y-%m-%d')),
             'createdAt': datetime.utcnow(),
+            'status': 'pending',
+            'statusReason': '',
         }
         result = submissions.insert_one(doc)
         forms.update_one({'_id': ObjectId(data['formId'])}, {'$inc': {'submissionCount': 1}})
         doc['_id'] = result.inserted_id
+        # Log form submission activity (no credentials)
+        student_activity.insert_one({
+            'studentId': None,
+            'name': doc.get('studentName'),
+            'email': doc.get('email', ''),
+            'eventType': 'form_submit',
+            'formId': ObjectId(data['formId']),
+            'submissionId': doc['_id'],
+            'createdAt': datetime.utcnow(),
+            'ipAddress': request.remote_addr,
+        })
         return jsonify(to_client(doc)), 201
     except Exception as e:
         return jsonify({'message': str(e)}), 500
@@ -658,6 +759,79 @@ def update_submission(submission_id):
             return jsonify({'message': 'Submission not found.'}), 404
         updated = submissions.find_one({'_id': ObjectId(submission_id)})
         return jsonify(to_client(updated))
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+@app.route('/api/submissions/<submission_id>/verify', methods=['POST'])
+@require_auth
+def verify_submission(submission_id):
+    """Approve or reject a submission (admin only)."""
+    try:
+        data = get_request_data()
+        status = data.get('status')
+        reason = data.get('reason', '')
+
+        if status not in ('approved', 'rejected'):
+            return jsonify({'message': 'Invalid status.'}), 400
+
+        result = submissions.update_one(
+            {'_id': ObjectId(submission_id)},
+            {'$set': {'status': status, 'statusReason': reason, 'verifiedAt': datetime.utcnow(), 'verifiedBy': request.user['id']}}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({'message': 'Submission not found.'}), 404
+
+        # If approved, increment forms submissionCount remains as-is (already incremented on create)
+        # Record admin action in student_activity for audit
+        sub = submissions.find_one({'_id': ObjectId(submission_id)})
+        student_activity.insert_one({
+            'studentId': sub.get('studentId'),
+            'name': sub.get('studentName'),
+            'email': sub.get('email', ''),
+            'eventType': f'submission_{status}',
+            'submissionId': sub['_id'],
+            'createdAt': datetime.utcnow(),
+            'adminId': request.user['id'],
+        })
+
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+@app.route('/api/visit-logs', methods=['GET'])
+@require_auth
+def get_visit_logs():
+    """Return combined visit and activity logs for admin review (no credentials)."""
+    try:
+        # recent student activity
+        activity = list(student_activity.find().sort('createdAt', -1).limit(1000))
+        visits = list(visitors.find().sort('createdAt', -1).limit(1000))
+
+        logs = []
+        for a in activity:
+            logs.append({
+                'timestamp': a.get('createdAt').isoformat() if a.get('createdAt') else '',
+                'userEmail': a.get('email', '') or '',
+                'action': a.get('eventType'),
+                'page': a.get('page', '') or '',
+                'ipAddress': a.get('ipAddress', '') or '',
+            })
+
+        for v in visits:
+            logs.append({
+                'timestamp': v.get('createdAt').isoformat() if v.get('createdAt') else '',
+                'userEmail': v.get('email', '') or '',
+                'action': 'page_visit',
+                'page': v.get('page', ''),
+                'ipAddress': v.get('ipAddress', '') or '',
+            })
+
+        # sort by timestamp desc
+        logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        return jsonify(logs)
     except Exception as e:
         return jsonify({'message': str(e)}), 500
 
